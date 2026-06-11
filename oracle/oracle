@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Thin HTTP client for the SameBoy oracle (no SameBoy source/binary on this side).
+
+    oracle run <rom> <frames> [--out frame.png] [--keys replay.txt]
+    oracle screenshot <rom> <frame> <out.png>
+
+Talks to $ORACLE_URL (default http://127.0.0.1:8765). Uses only the stdlib so it can be
+dropped into the offline generation container.
+"""
+import argparse
+import base64
+import json
+import os
+import sys
+import urllib.request
+
+URL = os.environ.get("ORACLE_URL", "http://127.0.0.1:8765")
+
+
+def post(path: str, payload: dict) -> dict:
+    req = urllib.request.Request(
+        URL + path, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())
+
+
+def parse_keys(path: str | None) -> dict:
+    if not path:
+        return {}
+    schedule = {}
+    for line in open(path):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        frame, hexmask = line.split()
+        schedule[int(frame)] = int(hexmask, 16)
+    return schedule
+
+
+def cmd_run(args):
+    rom_b64 = base64.b64encode(open(args.rom, "rb").read()).decode()
+    res = post("/run", {"rom_b64": rom_b64, "frames": args.frames,
+                        "keys": parse_keys(args.keys)})
+    if "png_b64" in res and args.out:
+        open(args.out, "wb").write(base64.b64decode(res["png_b64"]))
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(res))
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="oracle")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("run", help="run a ROM N frames; dump the final screen")
+    r.add_argument("rom")
+    r.add_argument("frames", type=int)
+    r.add_argument("--out", default="oracle_frame.png")
+    r.add_argument("--keys", help="<frame> <keys_hex> replay file")
+    r.set_defaults(func=cmd_run)
+
+    s = sub.add_parser("screenshot", help="run a ROM to frame N; dump the screen")
+    s.add_argument("rom")
+    s.add_argument("frame", type=int)
+    s.add_argument("out")
+    s.set_defaults(func=lambda a: cmd_run(argparse.Namespace(
+        rom=a.rom, frames=a.frame, out=a.out, keys=None)))
+
+    args = ap.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
