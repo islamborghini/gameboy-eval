@@ -1,0 +1,279 @@
+"""Tiny local control panel for gameboy-eval — drive the CLI tools from a browser.
+
+    .venv/bin/python webapp/server.py [port]        # default http://127.0.0.1:8000
+
+Stdlib only (http.server + background subprocess threads); binds to localhost. It shells out
+to the very same scripts the README documents — generate / grade / build_leaderboard /
+fetch_data — and streams their stdout back to the page. Long jobs run in worker threads; the
+page polls /api/log. Provider settings (e.g. an OpenRouter key) are held in memory and
+overlaid onto spawned jobs only — never written to disk.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import threading
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB = Path(__file__).resolve().parent
+PY = sys.executable  # the interpreter running us — launch via .venv/bin/python to inherit deps
+
+# Provider env overlaid onto spawned jobs (in-memory only; never persisted to disk).
+PROVIDER_ENV: dict[str, str] = {}
+
+JOBS: dict[str, "Job"] = {}
+LOCK = threading.Lock()
+
+CTYPES = {".html": "text/html", ".js": "application/javascript", ".json": "application/json",
+          ".css": "text/css", ".wasm": "application/wasm", ".gb": "application/octet-stream",
+          ".bin": "application/octet-stream"}
+
+
+# --------------------------------------------------------------------------- jobs
+
+class Job:
+    """A spawned CLI command whose combined stdout/stderr is buffered for the page to poll."""
+
+    def __init__(self, title: str, argv: list[str]):
+        self.id = uuid.uuid4().hex[:12]
+        self.title = title
+        self.argv = argv
+        self.lines: list[str] = []
+        self.status = "running"            # running | done | failed
+        self.returncode: int | None = None
+        self.proc: subprocess.Popen | None = None
+
+    def run(self) -> None:
+        env = {**os.environ, **PROVIDER_ENV}
+        self.lines.append("$ " + " ".join(self.argv))
+        try:
+            self.proc = subprocess.Popen(
+                self.argv, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, bufsize=1,
+            )
+        except Exception as e:  # noqa: BLE001
+            self.lines.append(f"failed to start: {e!r}")
+            self.status = "failed"
+            return
+        for line in self.proc.stdout:      # type: ignore[union-attr]
+            self.lines.append(line.rstrip("\n"))
+        self.returncode = self.proc.wait()
+        self.status = "done" if self.returncode == 0 else "failed"
+
+    def stop(self) -> None:
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+
+
+def start_job(title: str, argv: list[str]) -> str:
+    job = Job(title, argv)
+    with LOCK:
+        JOBS[job.id] = job
+    threading.Thread(target=job.run, daemon=True).start()
+    return job.id
+
+
+def build_argv(action: str, p: dict) -> tuple[str, list[str]]:
+    """Map a GUI action + params onto the CLI argv the README would run."""
+    if action == "generate":
+        model = (p.get("model") or "").strip()
+        if not model:
+            raise ValueError("a model id is required")
+        argv = [PY, "harness/generate.py", model]
+        minutes = float(p.get("minutes") or 0)
+        if minutes > 0:
+            argv += ["--minutes", str(minutes)]
+        else:
+            argv += ["--iters", str(int(p.get("iters") or 4))]
+        return f"generate · {model}", argv
+    if action == "grade":
+        target = (p.get("target") or "").strip()
+        if target == "oracle":
+            return "grade · oracle self-play", [PY, "grader/grade.py", "oracle"]
+        wasm = ROOT / "candidates" / target / "gb_emu.wasm"
+        if not (ROOT / "candidates" / target).is_dir() or not wasm.exists():
+            raise ValueError("unknown candidate")
+        out = ROOT / "leaderboard/results" / f"{target}.json"   # feeds build_leaderboard.py
+        return f"grade · {target}", [PY, "grader/grade.py", str(wasm), str(out)]
+    if action == "leaderboard":
+        return "build leaderboard", [PY, "scripts/build_leaderboard.py"]
+    if action == "fetch":
+        return "fetch test ROMs", [PY, "scripts/fetch_data.py"]
+    raise ValueError(f"unknown action: {action}")
+
+
+# --------------------------------------------------------------------------- status
+
+def provider_status() -> dict:
+    env = {**os.environ, **PROVIDER_ENV}
+    if env.get("OPENROUTER_API_KEY"):
+        active = "openrouter"
+    elif env.get("OPENAI_BASE_URL"):
+        active = "openai-compatible"
+    else:
+        active = "ollama"
+    return {
+        "active": active,
+        "openrouter_key_set": bool(env.get("OPENROUTER_API_KEY")),
+        "openai_base_url": env.get("OPENAI_BASE_URL") or "",
+        "openai_key_set": bool(env.get("OPENAI_API_KEY")),
+        "ollama_url": env.get("OLLAMA_URL") or "http://127.0.0.1:11434",
+    }
+
+
+def docker_state() -> tuple[bool, bool]:
+    """(docker running?, gameboy-eval-gen image built?) — best-effort, short timeouts."""
+    try:
+        if subprocess.run(["docker", "info"], capture_output=True, timeout=6).returncode != 0:
+            return False, False
+        img = subprocess.run(["docker", "images", "-q", "gameboy-eval-gen"],
+                             capture_output=True, text=True, timeout=6)
+        return True, bool(img.stdout.strip())
+    except Exception:  # noqa: BLE001
+        return False, False
+
+
+def status() -> dict:
+    docker, gen_image = docker_state()
+    cands = [d for d in (ROOT / "candidates").glob("*") if d.is_dir()]
+    return {
+        "provider": provider_status(),
+        "python": PY,
+        "root": str(ROOT),
+        "docker": docker,
+        "gen_image": gen_image,
+        "data_present": (ROOT / "data/test-roms").is_dir(),
+        "candidates": len(cands),
+    }
+
+
+def candidates() -> list[dict]:
+    out = []
+    for d in sorted((ROOT / "candidates").glob("*"), reverse=True):
+        if not d.is_dir():
+            continue
+        info = {"name": d.name, "model": None, "best_score": None, "created": None,
+                "artifact": (d / "gb_emu.wasm").exists()}
+        meta = d / "meta.json"
+        if meta.exists():
+            m = json.loads(meta.read_text())
+            info.update(model=m.get("model"), best_score=m.get("best_score"),
+                        created=m.get("created"))
+        out.append(info)
+    return out
+
+
+def leaderboard() -> dict | None:
+    f = ROOT / "leaderboard/leaderboard.json"
+    return json.loads(f.read_text()) if f.exists() else None
+
+
+# --------------------------------------------------------------------------- http
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):  # quiet: the page polls /api/log once a second
+        pass
+
+    def _json(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _file(self, path: Path):
+        if not path.is_file():
+            self.send_error(404)
+            return
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", CTYPES.get(path.suffix, "application/octet-stream"))
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _static(self, root: Path, rel: str):
+        """Serve rel under root with a path-traversal guard."""
+        target = (root / rel).resolve()
+        if root.resolve() not in target.parents and target != root.resolve():
+            self.send_error(403)
+            return
+        self._file(target)
+
+    def _body(self) -> dict:
+        n = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(n) or b"{}") if n else {}
+
+    def do_GET(self):
+        u = urlparse(self.path)
+        path, q = u.path, parse_qs(u.query)
+        if path in ("/", "/index.html"):
+            return self._file(WEB / "index.html")
+        if path == "/app.js":
+            return self._file(WEB / "app.js")
+        if path.startswith("/leaderboard/"):       # the existing static site + its assets
+            return self._static(ROOT / "leaderboard", path[len("/leaderboard/"):])
+        if path == "/api/status":
+            return self._json(status())
+        if path == "/api/candidates":
+            return self._json(candidates())
+        if path == "/api/leaderboard":
+            return self._json(leaderboard())
+        if path == "/api/log":
+            jid = (q.get("id") or [""])[0]
+            off = int((q.get("offset") or ["0"])[0])
+            job = JOBS.get(jid)
+            if not job:
+                return self._json({"error": "no such job"}, 404)
+            new = job.lines[off:]
+            return self._json({"lines": new, "offset": off + len(new),
+                               "status": job.status, "returncode": job.returncode})
+        self.send_error(404)
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        body = self._body()
+        if path == "/api/run":
+            try:
+                title, argv = build_argv(body.get("action", ""), body)
+            except (ValueError, TypeError) as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json({"id": start_job(title, argv), "title": title})
+        if path == "/api/stop":
+            job = JOBS.get(body.get("id", ""))
+            if job:
+                job.stop()
+            return self._json({"ok": bool(job)})
+        if path == "/api/provider":
+            for field, var in (("openrouter_key", "OPENROUTER_API_KEY"),
+                               ("openai_base_url", "OPENAI_BASE_URL"),
+                               ("openai_key", "OPENAI_API_KEY"),
+                               ("ollama_url", "OLLAMA_URL")):
+                val = (body.get(field) or "").strip()
+                if val:
+                    PROVIDER_ENV[var] = val
+                else:
+                    PROVIDER_ENV.pop(var, None)
+            return self._json(provider_status())
+        self.send_error(404)
+
+
+def main():
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"gameboy-eval control panel → http://127.0.0.1:{port}  (Ctrl-C to stop)")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nbye")
+
+
+if __name__ == "__main__":
+    main()

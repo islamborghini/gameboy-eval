@@ -68,6 +68,19 @@ docker build -t gameboy-eval-gen env/   # offline build sandbox
 .venv/bin/python harness/generate.py qwen2.5-coder:7b --iters 4
 ```
 
+## Control panel (GUI)
+
+Prefer a browser to the terminal? A tiny **stdlib-only** server wraps the same scripts — no
+extra dependencies, localhost-only:
+
+```sh
+.venv/bin/python webapp/server.py        # -> http://127.0.0.1:8000
+```
+
+Menu: **Dashboard** (prerequisite checks) · **Generate** · **Grade** · **Candidates** ·
+**Leaderboard** · **Provider** (set an OpenRouter / OpenAI-compatible key for the session,
+held in memory only). It shells out to the CLIs above and streams their output live.
+
 ## Layout
 
 ```
@@ -77,6 +90,7 @@ gameboy-eval/
 ├── oracle/                # SameBoy wrapped as a black-box HTTP service + client
 ├── harness/               # generation (agentic) + provider layer
 ├── grader/                # replay-SSIM / procedural / audio / composite / report
+├── webapp/                # localhost control panel — a GUI over the CLIs (stdlib http.server)
 ├── reference/             # known-good emulator(s) to validate the grader
 ├── data/sm83/             # (optional) CPU vectors for internal smoke-tests
 ├── replays/               # short HOMEBREW input recordings
