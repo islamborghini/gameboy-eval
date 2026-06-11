@@ -84,6 +84,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("model", nargs="?", default=DEFAULT_MODEL)
     ap.add_argument("--iters", type=int, default=4)
+    ap.add_argument("--minutes", type=float, default=0.0,
+                    help="continuous-runtime budget (minutes); the task never 'finishes' "
+                         "and overrides --iters")
     args = ap.parse_args()
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -99,14 +102,30 @@ def main():
     best_score, best_wasm = -1.0, None
     wasm_path = workdir / "target/wasm32-unknown-unknown/release/gb_emu.wasm"
 
-    for it in range(1, args.iters + 1):
-        print(f"\n===== iteration {it}/{args.iters} ({args.model}) =====")
+    start = time.time()
+    it = 0
+    while True:
+        it += 1
+        if args.minutes > 0:
+            if (time.time() - start) / 60 >= args.minutes:
+                break
+            print(f"\n===== iteration {it} (continuous {args.minutes:g}min) ({args.model}) =====")
+        else:
+            if it > args.iters:
+                break
+            print(f"\n===== iteration {it}/{args.iters} ({args.model}) =====")
+        # Keep context bounded (system + recent turns) so calls stay fast and don't time out.
+        if len(messages) > 7:
+            messages = [messages[0]] + messages[-6:]
         messages.append({"role": "user", "content": feedback})
         t0 = time.time()
         try:
-            reply = chat(messages, args.model)
+            reply = chat(messages, args.model, timeout=300)
         except Exception as e:  # noqa: BLE001
             print(f"model call failed: {e!r}")
+            if args.minutes > 0:  # continuous: the task never ends — keep going
+                feedback = "(previous call failed; keep improving) " + feedback
+                continue
             break
         messages.append({"role": "assistant", "content": reply})
         print(f"  model replied in {time.time()-t0:.0f}s ({len(reply)} chars)")
