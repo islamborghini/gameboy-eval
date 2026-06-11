@@ -16,8 +16,10 @@ __pycache__/
 
 # --- Local run outputs ---
 /runs/
+/candidates/
 *.log
 scores.json.tmp
+/scores.json
 
 # --- OS ---
 .DS_Store
