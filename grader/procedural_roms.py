@@ -50,13 +50,18 @@ def score_procedural(
     n_frames: int = DEFAULT_FRAMES,
     threshold: float = PASS_THRESHOLD,
     boot_rom: bytes | None = None,
+    oracle_finals: dict[str, "object"] | None = None,
 ) -> ProceduralResult:
+    """If `oracle_finals` (name -> settled oracle frame) is given, the oracle isn't re-run."""
     results: list[RomResult] = []
     for p in roms:
         p = Path(p)
         rom = p.read_bytes()
         cand = final_frame(candidate(), rom, n_frames, boot_rom)
-        ref = final_frame(oracle(), rom, n_frames)
+        if oracle_finals is not None and p.name in oracle_finals:
+            ref = oracle_finals[p.name]
+        else:
+            ref = final_frame(oracle(), rom, n_frames)
         d = frame_defect(cand, ref)
         results.append(RomResult(p.name, d, d <= threshold))
     score = sum(r.passed for r in results) / len(results) if results else 0.0

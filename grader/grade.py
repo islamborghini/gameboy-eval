@@ -26,10 +26,30 @@ from sameboy import OracleEmu  # noqa: E402
 from runner import WasmEmu  # noqa: E402
 from replay import drive, score_replay_aligned  # noqa: E402
 from audio import capture_audio, score_audio  # noqa: E402
-from procedural_roms import score_procedural  # noqa: E402
+from procedural_roms import (  # noqa: E402
+    score_procedural, final_frame, DEFAULT_FRAMES as PROC_FRAMES,
+)
 from report import build_report, print_summary, write_scores  # noqa: E402
 
+import hashlib  # noqa: E402
+
+# The oracle is deterministic, so its output for (rom, frames, schedule) is cached and
+# reused across candidates (big win for batch grading / repeated validation runs).
+_oracle_cache: dict = {}
+
+
+def _ocache(kind, rom, frames, schedule, compute):
+    key = (kind, hashlib.md5(rom).hexdigest(), frames, tuple(sorted(schedule.items())))
+    if key not in _oracle_cache:
+        _oracle_cache[key] = compute()
+    return _oracle_cache[key]
+
 ACTIONS = ROOT / "oracle/SameBoy/.github/actions"
+TR = ROOT / "data/test-roms"  # the fetched c-sp suite (scripts/fetch_data.py)
+
+
+def _exists(paths):
+    return [p for p in paths if p.exists()]
 
 
 @dataclass
@@ -40,10 +60,23 @@ class ReplaySpec:
     tail: int | None  # score only the last `tail` frames (None = all)
 
 
-# Minimal M4 suite (bundled SameBoy test ROMs). Extend via scripts/fetch_data.py later.
-REPLAYS = [ReplaySpec(ACTIONS / "dmg-acid2.gb", 200, {}, 80)]
-AUDIO_REPLAYS = [ReplaySpec(ACTIONS / "dmg_sound-2.gb", 120, {}, None)]
-PROC_ROMS = [ACTIONS / "dmg-acid2.gb", ACTIONS / "oam_bug-2.gb", ACTIONS / "dmg_sound-2.gb"]
+# Prefer the fetched c-sp suite; fall back to the bundled SameBoy ROMs if not fetched.
+REPLAYS = [ReplaySpec(p, 400, {}, None) for p in _exists([
+    TR / "blargg/cpu_instrs/cpu_instrs.gb",  # scrolls its output as it runs = moving content
+])] or [ReplaySpec(ACTIONS / "dmg-acid2.gb", 200, {}, None)]
+
+AUDIO_REPLAYS = [ReplaySpec(p, 120, {}, None) for p in _exists([
+    TR / "blargg/dmg_sound/dmg_sound.gb",
+])] or [ReplaySpec(ACTIONS / "dmg_sound-2.gb", 120, {}, None)]
+
+# Procedural: tests that settle to a static pass/fail screen (good screenshot discriminators).
+PROC_ROMS = _exists([
+    TR / "dmg-acid2/dmg-acid2.gb",
+    TR / "blargg/cpu_instrs/individual/01-special.gb",
+    TR / "blargg/cpu_instrs/individual/06-ld r,r.gb",
+    TR / "blargg/instr_timing/instr_timing.gb",
+    TR / "blargg/mem_timing/mem_timing.gb",
+]) or [ACTIONS / "dmg-acid2.gb", ACTIONS / "oam_bug-2.gb", ACTIONS / "dmg_sound-2.gb"]
 
 EmuFactory = Callable[[], object]
 
@@ -54,20 +87,27 @@ def grade(candidate: EmuFactory, label: str, oracle: EmuFactory = OracleEmu) -> 
     for spec in REPLAYS:
         rom = spec.rom.read_bytes()
         cand = drive(candidate(), rom, spec.frames, spec.schedule)
-        ref = drive(oracle(), rom, spec.frames, spec.schedule)
+        ref = _ocache("replay", rom, spec.frames, spec.schedule,
+                      lambda: drive(oracle(), rom, spec.frames, spec.schedule))
         res, _offset = score_replay_aligned(cand, ref)
         replay_scores.append(res.score)
     replay = float(np.mean(replay_scores)) if replay_scores else 0.0
 
-    # --- procedural ---
-    proc = score_procedural(candidate, oracle, PROC_ROMS)
+    # --- procedural (oracle final frames cached) ---
+    oracle_finals = {}
+    for p in PROC_ROMS:
+        rb = Path(p).read_bytes()
+        oracle_finals[Path(p).name] = _ocache(
+            "proc", rb, PROC_FRAMES, {}, lambda rb=rb: final_frame(oracle(), rb, PROC_FRAMES))
+    proc = score_procedural(candidate, oracle, PROC_ROMS, oracle_finals=oracle_finals)
 
     # --- audio (0 if the candidate produces none) ---
     audio_scores = []
     for spec in AUDIO_REPLAYS:
         rom = spec.rom.read_bytes()
         ca = capture_audio(candidate(), rom, spec.frames)
-        ra = capture_audio(oracle(), rom, spec.frames)
+        ra = _ocache("audio", rom, spec.frames, {},
+                     lambda: capture_audio(oracle(), rom, spec.frames))
         audio_scores.append(0.0 if ca.shape[0] == 0 else score_audio(ca, ra).score)
     audio = float(np.mean(audio_scores)) if audio_scores else 0.0
 
