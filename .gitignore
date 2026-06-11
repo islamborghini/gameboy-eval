@@ -13,6 +13,7 @@ __pycache__/
 # --- Vendored upstream sources (fetched by scripts, not committed) ---
 /oracle/SameBoy/
 /data/_cache/
+/data/test-roms/
 
 # --- Local run outputs ---
 /runs/
