@@ -35,6 +35,7 @@ to the fixed path `target/wasm32-unknown-unknown/release/gb_emu.wasm`, exporting
 - [x] **M4** Full grader: replay SSIM + procedural ROMs + audio + composite + score-band report (oracle 0.9988, rboy 0.7333, broken 0.0)
 - [x] **M5** Agentic generation (leaner cut): harness drives Ollama → writes `src/lib.rs` → builds OFFLINE in a `--network none` sandbox → grades vs oracle → feeds back → saves artifact (qwen2.5-coder:7b & qwen3:8b ran end-to-end, scored ~0 as expected)
 - [x] **M6** Static [`leaderboard/`](leaderboard/) — ranked composite + score bands, and the candidate `gb_emu.wasm` runs **in-browser** on a canvas (validated via node: zero imports, renders dmg-acid2)
+- [x] **Hardening** Oracle in its own Linux container reachable only over an *internal* Docker network — the offline sandbox reaches the oracle but **not** the internet ([`scripts/run-sandbox.sh`](scripts/run-sandbox.sh)); `generate.py --minutes` continuous-runtime mode
 - [ ] **M6** Audio polish + leaderboard with in-browser WASM artifacts
 
 The spine deliberately **validates the grading harness against a known-good emulator (M2–M4) before building the generation side (M5)** — "grader against itself", at the full-emulator level.
