@@ -22,5 +22,8 @@ __pycache__/
 scores.json.tmp
 /scores.json
 
+# --- Local-only design notes (kept on device, not published) ---
+/EMU-EVAL-DESIGN.md
+
 # --- OS ---
 .DS_Store

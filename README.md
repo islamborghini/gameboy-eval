@@ -38,7 +38,7 @@ to the fixed path `target/wasm32-unknown-unknown/release/gb_emu.wasm`, exporting
 
 The spine deliberately **validates the grading harness against a known-good emulator (M2–M4) before building the generation side (M5)** — "grader against itself", at the full-emulator level.
 
-See [`EMU-EVAL-DESIGN.md`](EMU-EVAL-DESIGN.md) for the full design (rev. 3).
+See [`spec/ABI.md`](spec/ABI.md) for the candidate ABI contract.
 
 ## Prerequisites (macOS, Apple Silicon)
 
@@ -70,7 +70,6 @@ docker build -t gameboy-eval-gen env/   # offline build sandbox
 
 ```
 gameboy-eval/
-├── EMU-EVAL-DESIGN.md     # full design (rev. 3)
 ├── spec/ABI.md            # the lockstep WASM ABI candidates must export
 ├── env/                   # offline generation container + TASK.md
 ├── oracle/                # SameBoy wrapped as a black-box HTTP service + client
