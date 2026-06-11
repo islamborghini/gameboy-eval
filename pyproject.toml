@@ -1,0 +1,25 @@
+[project]
+name = "gameboy-eval"
+version = "0.0.1"
+description = "An open benchmark measuring how well coding agents build a Game Boy (DMG) emulator from scratch — graded deterministically via lockstep replay-SSIM against a SameBoy oracle."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pillow>=10.0",
+  "requests>=2.31",
+  "wasmtime>=20.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+# Note: the grader/harness are run directly from the source tree against the
+# .venv interpreter (python3.12). This file documents dependencies and tool
+# config; it is not packaged/installed as a wheel in v0.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

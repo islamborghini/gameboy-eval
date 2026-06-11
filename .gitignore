@@ -1,0 +1,23 @@
+# --- Rust / WASM build artifacts ---
+target/
+**/target/
+
+# --- Python ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Vendored upstream sources (fetched by scripts, not committed) ---
+/oracle/SameBoy/
+/data/_cache/
+
+# --- Local run outputs ---
+/runs/
+*.log
+scores.json.tmp
+
+# --- OS ---
+.DS_Store

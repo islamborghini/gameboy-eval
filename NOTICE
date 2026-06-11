@@ -1,0 +1,37 @@
+gameboy-eval — third-party assets and attribution
+==================================================
+
+This benchmark vendors and/or fetches third-party assets that are published for
+the purpose of testing Game Boy emulators. Each is used under its own license;
+originals and licenses are retained in their respective fetched directories.
+
+Reference emulator / oracle
+---------------------------
+- SameBoy — https://github.com/LIJI32/SameBoy — MIT License.
+  Used as a BLACK-BOX oracle (never as a source reference for candidates).
+  SameBoy ships its own open-source Game Boy boot ROM, which we use for BOTH
+  the oracle and candidates. The original Nintendo boot ROM is NEVER shipped.
+
+CPU test vectors (optional internal CPU smoke-test only)
+--------------------------------------------------------
+- SingleStepTests/sm83 — https://github.com/SingleStepTests/sm83
+- adtennant/GameboyCPUTests — https://github.com/adtennant/GameboyCPUTests
+
+Procedural test ROMs
+--------------------
+- c-sp/game-boy-test-roms — https://github.com/c-sp/game-boy-test-roms
+  (aggregates Blargg, Mooneye, dmg-acid2/cgb-acid2, Mealybug Tearoom, etc.)
+- Gekkio/mooneye-test-suite — https://github.com/Gekkio/mooneye-test-suite — MIT.
+- mattcurrie/dmg-acid2, mattcurrie/cgb-acid2.
+- Suite metadata: adtennant/GameboyTestSuites.
+
+Hardware reference
+------------------
+- Pan Docs — https://gbdev.io/pandocs — CC BY-SA / see upstream.
+
+Replay ROMs
+-----------
+- HOMEBREW ONLY. No commercial ROMs are ever included. See replays/README.
+
+Each upstream's full license text is preserved in the directory into which it is
+fetched (see scripts/fetch_data.py). This NOTICE is a summary, not a substitute.
