@@ -120,11 +120,12 @@ couple of minutes), targeting milestones ("clears level 1"), never full playthro
 ## 4. Build order (status)
 
 - [x] **M0** Scaffold: repo layout, Python 3.12 venv, NOTICE, ABI/TASK/design docs.
-- [~] **M1** Toolchain: Rust + `wasm32-unknown-unknown` + wasmtime + Docker; prove a
+- [x] **M1** Toolchain: Rust 1.96 + `wasm32-unknown-unknown` + wasmtime 45 + Docker;
   hello-world cdylib → `.wasm` → callable (incl. linear-memory read) via wasmtime.
-- [ ] **M2** SameBoy wrapped as a black-box HTTP **oracle** (batch + session, open boot
-  ROM) + thin `oracle` client. Gate: runs a homebrew dev ROM and dumps frames/audio.
-- [ ] **M3** Lockstep harness + reference candidate:
+- [x] **M2** SameBoy driven as a black-box **oracle** via its libretro core (in-process for
+  now; HTTP wrapper deferred to M5). Gate passed: dmg-acid2 renders, deterministic, DMG-forced.
+- [x] **M3** Lockstep harness + reference candidate — BOTH gates passed (metric validated on
+  oracle-vs-perturbed; rboy-wasm scores 1.0000 vs the oracle):
   - (a) validate the SSIM/lockstep math with **oracle-vs-oracle (≈1.00)** and
     **oracle-vs-deliberately-perturbed (low / blank-gated)** — proves the grader detects
     failure, not just self-agreement;
