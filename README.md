@@ -49,7 +49,21 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y -t wasm3
 brew install wasmtime rgbds
 # Python 3.12 venv for the SSIM/audio stack
 python3.12 -m venv .venv && .venv/bin/pip install numpy scipy pillow requests wasmtime
-# Docker Desktop must be running (oracle + offline generation containers)
+# Docker Desktop must be running (the offline generation sandbox)
+```
+
+## Quick start
+
+```sh
+python scripts/fetch_data.py            # vendor the c-sp test-ROM suite -> data/test-roms/
+docker build -t gameboy-eval-gen env/   # offline build sandbox
+
+# grade a candidate (composite + score band + scores.json)
+.venv/bin/python grader/grade.py reference/known-good/target/wasm32-unknown-unknown/release/gb_emu.wasm
+# -> rboy known-good scores ~0.80 (passes Blargg cpu_instrs/instr_timing/mem_timing)
+
+# agentic generation with a local model (expect ~0 for a small model)
+.venv/bin/python harness/generate.py qwen2.5-coder:7b --iters 4
 ```
 
 ## Layout

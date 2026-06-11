@@ -170,6 +170,11 @@ the full-emulator level — de-risking the SSIM pipeline before any model is inv
 - **rev. 3 (this doc):** re-aimed to maximum fidelity — full-emulator Rust→WASM artifact,
   replay-led composite vs. a SameBoy oracle, agentic offline generation. Grader validated
   against a known-good emulator before any model is involved.
+- **rev. 3 substance pass:** real c-sp test-ROM suite wired into the procedural + replay
+  sections (`scripts/fetch_data.py`); boot-offset stream alignment so candidates without a
+  boot ROM align to the oracle; oracle output caching across candidates; SameBoy core-log
+  suppression. Known-good rboy scores 0.80 (passes Blargg cpu_instrs/instr_timing/mem_timing
+  and 1.0 on the moving cpu_instrs replay); a broken candidate scores 0.0.
 
 ## 7. Resources
 - Oracle: SameBoy — https://github.com/LIJI32/SameBoy (ships an open boot ROM)
