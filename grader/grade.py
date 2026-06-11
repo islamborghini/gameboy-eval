@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / "grader"))
 
 from sameboy import OracleEmu  # noqa: E402
 from runner import WasmEmu  # noqa: E402
-from replay import drive, score_replay  # noqa: E402
+from replay import drive, score_replay_aligned  # noqa: E402
 from audio import capture_audio, score_audio  # noqa: E402
 from procedural_roms import score_procedural  # noqa: E402
 from report import build_report, print_summary, write_scores  # noqa: E402
@@ -55,8 +55,8 @@ def grade(candidate: EmuFactory, label: str, oracle: EmuFactory = OracleEmu) -> 
         rom = spec.rom.read_bytes()
         cand = drive(candidate(), rom, spec.frames, spec.schedule)
         ref = drive(oracle(), rom, spec.frames, spec.schedule)
-        tail = spec.tail or len(ref)
-        replay_scores.append(score_replay(cand[-tail:], ref[-tail:]).score)
+        res, _offset = score_replay_aligned(cand, ref)
+        replay_scores.append(res.score)
     replay = float(np.mean(replay_scores)) if replay_scores else 0.0
 
     # --- procedural ---
