@@ -118,6 +118,36 @@ def score_replay(cand_frames: list[np.ndarray], ref_frames: list[np.ndarray],
     )
 
 
+def align_offset(cand_frames: list[np.ndarray], ref_frames: list[np.ndarray],
+                 max_shift: int = 120, probe: int = 24) -> int:
+    """Find shift s>=0 so cand[i] best matches ref[i+s].
+
+    Absorbs a constant frame offset between the streams: a candidate that skips the boot
+    animation runs ~60 frames ahead of the oracle, and emulators can differ by a frame of
+    pacing. A faithful candidate that runs the boot ROM aligns at s~=0; a broken candidate
+    finds no good alignment and still scores ~0.
+    """
+    probe = min(probe, len(cand_frames))
+    best_s, best_d = 0, float("inf")
+    for s in range(0, max_shift + 1):
+        if s + probe > len(ref_frames):
+            break
+        d = float(np.mean([frame_defect(cand_frames[i], ref_frames[s + i])
+                           for i in range(probe)]))
+        if d < best_d:
+            best_d, best_s = d, s
+    return best_s
+
+
+def score_replay_aligned(cand_frames: list[np.ndarray], ref_frames: list[np.ndarray],
+                         max_shift: int = 120, bs: int = BLOCK,
+                         floor: float = FLOOR) -> tuple[ReplayResult, int]:
+    """Align the two streams, then score the overlapping region."""
+    s = align_offset(cand_frames, ref_frames, max_shift)
+    n = min(len(cand_frames), len(ref_frames) - s)
+    return score_replay(cand_frames[:n], ref_frames[s:s + n], bs, floor), s
+
+
 def drive(emu, rom: bytes, n_frames: int, schedule: dict[int, int] | None = None,
           boot_rom: bytes | None = None) -> list[np.ndarray]:
     """Run an Emulator through a replay and capture every frame (uint8 [144,160,4] RGBA).
