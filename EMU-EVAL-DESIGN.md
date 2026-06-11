@@ -132,8 +132,8 @@ couple of minutes), targeting milestones ("clears level 1"), never full playthro
   - (b) bring up the real WASM candidate path by **porting a mature open-source Rust GB
     emulator** to the ABI, compiling to `.wasm`, driven by a wasmtime runner in lockstep
     with the oracle. Gate: that known-good candidate scores **≈1.0** vs the oracle.
-- [ ] **M4** Full grader: replay SSIM + procedural test-ROM section + audio + composite +
-  score-band report. Gate: composite computed; reference ≈1.0, broken ≈0.
+- [x] **M4** Full grader: replay SSIM + procedural test-ROM section + audio + composite +
+  score-band report. Gate passed: oracle self-play 0.9988, rboy 0.7333, broken 0.0000.
 - [ ] **M5** Agentic generation environment: `--network none` container with shell, Rust
   project, `oracle` CLI, `dev-roms/`, Pan Docs, boot ROM, continuous-runtime `TASK.md`,
   agent loop behind a provider-only proxy. Run a model; **expect ~0** for a small local

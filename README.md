@@ -32,7 +32,7 @@ to the fixed path `target/wasm32-unknown-unknown/release/gb_emu.wasm`, exporting
 - [x] **M1** Toolchain: Rust + `wasm32-unknown-unknown` + wasmtime + Docker; hello-world cdylib → `.wasm` → callable via wasmtime
 - [x] **M2** SameBoy driven as a black-box **oracle** via its libretro core (dmg-acid2 renders, deterministic, DMG-forced)
 - [x] **M3** Lockstep harness + reference candidate — (a) SSIM metric validated *oracle-vs-perturbed*; (b) rboy → `.wasm` scores **1.0000** vs the oracle
-- [ ] **M4** Full grader: replay SSIM + procedural ROMs + audio + composite + score-band report
+- [x] **M4** Full grader: replay SSIM + procedural ROMs + audio + composite + score-band report (oracle 0.9988, rboy 0.7333, broken 0.0)
 - [ ] **M5** Agentic, **offline** (`--network none`) generation environment behind a provider-only proxy
 - [ ] **M6** Audio polish + leaderboard with in-browser WASM artifacts
 
