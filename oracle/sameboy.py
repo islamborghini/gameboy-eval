@@ -79,6 +79,12 @@ audio_sample_t = C.CFUNCTYPE(None, C.c_int16, C.c_int16)
 audio_batch_t = C.CFUNCTYPE(C.c_size_t, C.POINTER(C.c_int16), C.c_size_t)
 input_poll_t = C.CFUNCTYPE(None)
 input_state_t = C.CFUNCTYPE(C.c_int16, C.c_uint, C.c_uint, C.c_uint, C.c_uint)
+log_printf_t = C.CFUNCTYPE(None, C.c_int, C.c_char_p)  # variadic; extra args ignored
+
+
+class retro_log_callback(C.Structure):
+    _fields_ = [("log", log_printf_t)]
+
 
 FB_W, FB_H = 160, 144
 
@@ -105,6 +111,7 @@ class SameBoyCore:
         self._audio_chunks: list[np.ndarray] = []
         self._value_bufs: list[bytes] = []  # keep GET_VARIABLE strings alive
         self._sysdir_buf = None  # keep the system-directory path alive
+        self._log_cb = log_printf_t(lambda level, fmt: None)  # swallow core logs
         self._rom_buf = None  # keep ROM bytes alive across retro_run
         self._install_callbacks()
         self.lib.retro_init()
@@ -161,6 +168,9 @@ class SameBoyCore:
             C.c_bool.from_address(data).value = False
             return True
         if cmd == ENV_SET_VARIABLES:
+            return True
+        if cmd == ENV_GET_LOG_INTERFACE:
+            retro_log_callback.from_address(data).log = self._log_cb
             return True
         if cmd in (ENV_GET_SYSTEM_DIRECTORY, ENV_GET_SAVE_DIRECTORY):
             if self._sysdir_buf is None:
