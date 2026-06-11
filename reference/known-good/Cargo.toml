@@ -1,0 +1,17 @@
+[package]
+name = "gb_emu"
+version = "0.1.0"
+edition = "2021"
+
+# Known-good reference candidate: a thin ABI shim over the rboy DMG core (MIT),
+# used to validate the grader (M3b). NOT a model submission.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rboy = { git = "https://github.com/mvdnes/rboy", rev = "274111d18596a4a9180ab8ccf24aeff5bb399df2" }
+
+[profile.release]
+opt-level = "z"
+lto = true
