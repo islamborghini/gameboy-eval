@@ -1,0 +1,44 @@
+{
+  "candidate": "gb_emu.wasm",
+  "overall": 0.8,
+  "band": "Mostly playable",
+  "weights": {
+    "replay": 0.6,
+    "audio": 0.2,
+    "procedural": 0.2
+  },
+  "sections": {
+    "replay": 1.0,
+    "audio": 0.0,
+    "procedural": 1.0
+  },
+  "detail": {
+    "procedural": [
+      {
+        "name": "dmg-acid2.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "01-special.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "06-ld r,r.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "instr_timing.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "mem_timing.gb",
+        "defect": 0.038702,
+        "pass": true
+      }
+    ]
+  }
+}

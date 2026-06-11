@@ -1,0 +1,44 @@
+{
+  "candidate": "qwen2.5-coder:7b",
+  "overall": 3.6e-05,
+  "band": "Doesn't run",
+  "weights": {
+    "replay": 0.6,
+    "audio": 0.2,
+    "procedural": 0.2
+  },
+  "sections": {
+    "replay": 6.1e-05,
+    "audio": 0.0,
+    "procedural": 0.0
+  },
+  "detail": {
+    "procedural": [
+      {
+        "name": "dmg-acid2.gb",
+        "defect": 0.888426,
+        "pass": false
+      },
+      {
+        "name": "01-special.gb",
+        "defect": 0.999609,
+        "pass": false
+      },
+      {
+        "name": "06-ld r,r.gb",
+        "defect": 0.999555,
+        "pass": false
+      },
+      {
+        "name": "instr_timing.gb",
+        "defect": 0.999578,
+        "pass": false
+      },
+      {
+        "name": "mem_timing.gb",
+        "defect": 0.999218,
+        "pass": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "candidate": "oracle (self-play)",
+  "overall": 0.998956,
+  "band": "Near-reference",
+  "weights": {
+    "replay": 0.6,
+    "audio": 0.2,
+    "procedural": 0.2
+  },
+  "sections": {
+    "replay": 1.0,
+    "audio": 0.994781,
+    "procedural": 1.0
+  },
+  "detail": {
+    "procedural": [
+      {
+        "name": "dmg-acid2.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "01-special.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "06-ld r,r.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "instr_timing.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "mem_timing.gb",
+        "defect": 0.0,
+        "pass": true
+      }
+    ]
+  }
+}

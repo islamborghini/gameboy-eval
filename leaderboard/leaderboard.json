@@ -1,0 +1,50 @@
+{
+  "generated": "2026-06-12",
+  "weights": {
+    "replay": 0.6,
+    "audio": 0.2,
+    "procedural": 0.2
+  },
+  "entries": [
+    {
+      "name": "oracle",
+      "overall": 0.998956,
+      "band": "Near-reference",
+      "sections": {
+        "replay": 1.0,
+        "audio": 0.994781,
+        "procedural": 1.0
+      }
+    },
+    {
+      "name": "rboy",
+      "overall": 0.8,
+      "band": "Mostly playable",
+      "sections": {
+        "replay": 1.0,
+        "audio": 0.0,
+        "procedural": 1.0
+      }
+    },
+    {
+      "name": "qwen2.5-coder-7b",
+      "overall": 3.6e-05,
+      "band": "Doesn't run",
+      "sections": {
+        "replay": 6.1e-05,
+        "audio": 0.0,
+        "procedural": 0.0
+      }
+    },
+    {
+      "name": "qwen3-8b",
+      "overall": 0.0,
+      "band": "Doesn't run",
+      "sections": {
+        "replay": 0.0,
+        "audio": 0.0,
+        "procedural": 0.0
+      }
+    }
+  ]
+}
