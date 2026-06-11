@@ -134,10 +134,16 @@ couple of minutes), targeting milestones ("clears level 1"), never full playthro
     with the oracle. Gate: that known-good candidate scores **≈1.0** vs the oracle.
 - [x] **M4** Full grader: replay SSIM + procedural test-ROM section + audio + composite +
   score-band report. Gate passed: oracle self-play 0.9988, rboy 0.7333, broken 0.0000.
-- [ ] **M5** Agentic generation environment: `--network none` container with shell, Rust
-  project, `oracle` CLI, `dev-roms/`, Pan Docs, boot ROM, continuous-runtime `TASK.md`,
-  agent loop behind a provider-only proxy. Run a model; **expect ~0** for a small local
-  model. Success = the environment runs end-to-end and is fair.
+- [x] **M5** Agentic generation environment (leaner first cut). Harness drives a local
+  model (Ollama) to write `src/lib.rs` for a fixed `gb_emu` cargo project, builds it OFFLINE
+  in a `--network none` Docker sandbox each iteration, grades the artifact vs the oracle, and
+  feeds build/grade results back; saves the best artifact + `meta.json`. Gate passed: the
+  loop runs end-to-end (qwen3:8b — build-fail fed back, then a compiling build graded at
+  0.0000 "Doesn't run", as expected for a small local model). The oracle is also exposed over
+  HTTP (`oracle/server.py` + `oracle` CLI).
+  *Deferred to hardening:* oracle as its own Linux container (currently a host process — the
+  macOS build is a `.dylib`); in-container `oracle` CLI over a restricted network (feedback is
+  currently harness-mediated since the sandbox is `--network none`); continuous-runtime/relaunch.
 - [ ] **M6** Audio polish + leaderboard with in-browser WASM artifacts.
 
 **Spine:** validate the grading harness against a **known-good emulator (M2–M4) before**

@@ -33,7 +33,7 @@ to the fixed path `target/wasm32-unknown-unknown/release/gb_emu.wasm`, exporting
 - [x] **M2** SameBoy driven as a black-box **oracle** via its libretro core (dmg-acid2 renders, deterministic, DMG-forced)
 - [x] **M3** Lockstep harness + reference candidate — (a) SSIM metric validated *oracle-vs-perturbed*; (b) rboy → `.wasm` scores **1.0000** vs the oracle
 - [x] **M4** Full grader: replay SSIM + procedural ROMs + audio + composite + score-band report (oracle 0.9988, rboy 0.7333, broken 0.0)
-- [ ] **M5** Agentic, **offline** (`--network none`) generation environment behind a provider-only proxy
+- [x] **M5** Agentic generation (leaner cut): harness drives Ollama → writes `src/lib.rs` → builds OFFLINE in a `--network none` sandbox → grades vs oracle → feeds back → saves artifact (qwen3:8b ran end-to-end, scored 0.0 as expected)
 - [ ] **M6** Audio polish + leaderboard with in-browser WASM artifacts
 
 The spine deliberately **validates the grading harness against a known-good emulator (M2–M4) before building the generation side (M5)** — "grader against itself", at the full-emulator level.
