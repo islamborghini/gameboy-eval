@@ -10,6 +10,7 @@ Pixel output is normalized to uint8 [144,160,4] RGBA to match spec/ABI.md.
 from __future__ import annotations
 
 import ctypes as C
+import os
 from pathlib import Path
 
 import numpy as np
@@ -88,13 +89,13 @@ class retro_log_callback(C.Structure):
 
 FB_W, FB_H = 160, 144
 
-DEFAULT_DYLIB = (
-    Path(__file__).resolve().parent
-    / "SameBoy/build/bin/sameboy_libretro.dylib"
-)
+# Library + boot-ROM dir are env-overridable so the same driver runs against a macOS .dylib
+# (host) or a Linux .so (the oracle container).
+_HERE = Path(__file__).resolve().parent
+DEFAULT_DYLIB = os.environ.get("SAMEBOY_LIB", str(_HERE / "SameBoy/build/bin/sameboy_libretro.dylib"))
 # Directory the core scans for an external boot ROM (dmg_boot.bin). Pointing it here
 # makes boot-ROM choice explicit instead of relying on the embedded fallback.
-BOOTROM_DIR = Path(__file__).resolve().parent / "SameBoy/build/bin/BootROMs"
+BOOTROM_DIR = os.environ.get("SAMEBOY_BOOTROMS", str(_HERE / "SameBoy/build/bin/BootROMs"))
 
 
 class SameBoyCore:

@@ -1,0 +1,11 @@
+# Keep the Docker build context tiny: only oracle/*.py is needed by the oracle image.
+.git
+.venv
+**/target
+data/test-roms
+oracle/SameBoy
+candidates
+runs
+leaderboard/demo
+*.log
+**/__pycache__
