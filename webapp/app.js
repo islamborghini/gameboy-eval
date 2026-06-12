@@ -362,7 +362,7 @@ const views = {
       <div class="cmp">
         <figure><figcaption>candidate</figcaption>
           <canvas class="gb" id="gbcv" width="160" height="144"></canvas></figure>
-        <figure id="refpane" style="display:none"><figcaption>reference (oracle-equivalent, ~1.0 vs oracle)</figcaption>
+        <figure id="refpane" style="display:none"><figcaption>reference (≈ oracle)</figcaption>
           <canvas class="gb" id="gbcv2" width="160" height="144"></canvas></figure>
       </div>
       <p class="hint">Keys: arrows = D-pad · <b>Z</b> = A · <b>X</b> = B · <b>Enter</b> = Start ·
