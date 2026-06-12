@@ -320,7 +320,7 @@ const views = {
   },
 
   async compare() {
-    main.innerHTML = `<h2>Compare</h2><div id="cmp">loading…</div>`;
+    main.innerHTML = `<h2>Candidate vs the real oracle</h2><div id="cmp">loading…</div>`;
     const [cands, roms] = await Promise.all([getJSON("/api/candidates"), getJSON("/api/roms")]);
     const arts = cands.filter((c) => c.artifact);
     const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(label)}</option>`;
@@ -328,9 +328,11 @@ const views = {
       .concat(arts.map((c) => opt(c.name, c.name, sel))).join("");
     const romOpts = roms.map((r) => opt(r.key, r.label, "")).join("");
     document.getElementById("cmp").innerHTML = `
-      <p class="hint">Runs the real emulators server-side (the grader's own drivers — SameBoy via
-        libretro for the oracle, wasmtime for a candidate) and plays the frames here. Same ROM
-        on both sides, no input sent. A candidate that traps shows its partial output + why.</p>
+      <p class="hint"><b>The ground-truth view.</b> Renders against the <b>real SameBoy oracle</b>
+        (native libretro) — the exact reference your composite score is computed against, not the
+        in-browser stand-in the <b>Play</b> page uses. Runs the grader's own drivers server-side on
+        the bundled test ROMs and streams the frames; a candidate that traps shows its partial
+        output + why. <b>No controller input</b> — for interactive keyboard + audio, use Play.</p>
       <div class="row">
         <div><label>Left (model)</label><select id="left">${sideOpts(arts.length ? arts[0].name : "oracle")}</select></div>
         <div><label>Right (oracle)</label><select id="right">${sideOpts("oracle")}</select></div>
@@ -405,7 +407,7 @@ const views = {
 
 // --- nav -------------------------------------------------------------------
 const MENU = [["dashboard", "Dashboard"], ["generate", "Generate"], ["grade", "Grade"],
-              ["candidates", "Candidates"], ["compare", "Compare"], ["play", "Play"],
+              ["candidates", "Candidates"], ["compare", "Oracle"], ["play", "Play"],
               ["leaderboard", "Leaderboard"], ["provider", "Provider"]];
 
 const nav = document.getElementById("nav");
