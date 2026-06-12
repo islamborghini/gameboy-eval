@@ -444,13 +444,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
 
+class QuietServer(ThreadingHTTPServer):
+    """A browser that hangs up mid-response (polling/navigating) raises BrokenPipeError /
+    ConnectionResetError — benign; swallow those instead of dumping a traceback."""
+
+    def handle_error(self, request, client_address):
+        if not isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            super().handle_error(request, client_address)
+
+
 def main():
     load_provider_cfg()                     # restore persisted provider settings
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     srv = None
     for port in range(want, want + 10):       # skip past an already-bound port
         try:
-            srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            srv = QuietServer(("127.0.0.1", port), Handler)
             break
         except OSError:
             print(f"port {port} in use, trying {port + 1}…")
