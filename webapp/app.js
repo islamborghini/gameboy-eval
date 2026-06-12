@@ -103,37 +103,53 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => { if (e.key in PLAY_KEYS) playMask &= ~(1 << PLAY_KEYS[e.key]); });
 
+// boot one wasm emulator (candidate or reference) on a ROM via the spec/ABI.md exports.
+async function bootEmu(wasmUrl, rom, useboot) {
+  const { instance } = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {});
+  const ex = instance.exports;
+  const mem = () => new Uint8Array(ex.memory.buffer);
+  const put = (b) => { const p = ex.alloc(b.length); mem().set(b, p); return [p, b.length]; };
+  ex.init?.();
+  if (useboot && ex.load_boot_rom) {
+    const boot = new Uint8Array(await (await fetch("/leaderboard/demo/boot_rom.bin")).arrayBuffer());
+    ex.load_boot_rom(...put(boot));
+  }
+  ex.load_rom(...put(rom));
+  ex.reset();
+  return { ex, mem };
+}
+
 async function startPlay() {
   cancelPlay();
   const status = document.getElementById("plstatus");
   const file = document.getElementById("rom").files[0];
   if (!file) { status.textContent = "Choose a .gb ROM file first."; return; }
+  const useboot = document.getElementById("useboot").checked;
+  const vs = document.getElementById("vsref").checked;
+  document.getElementById("refpane").style.display = vs ? "" : "none";
   status.textContent = "loading…";
   try {
     const rom = new Uint8Array(await file.arrayBuffer());
     const cand = document.getElementById("cand").value;
-    const { instance } = await WebAssembly.instantiateStreaming(
-      fetch(`/candidate/${encodeURIComponent(cand)}/gb_emu.wasm`), {});
-    const ex = instance.exports;
-    const mem = () => new Uint8Array(ex.memory.buffer);
-    const put = (b) => { const p = ex.alloc(b.length); mem().set(b, p); return [p, b.length]; };
-    ex.init?.();
-    if (document.getElementById("useboot").checked && ex.load_boot_rom) {
-      const boot = new Uint8Array(await (await fetch("/leaderboard/demo/boot_rom.bin")).arrayBuffer());
-      ex.load_boot_rom(...put(boot));
-    }
-    ex.load_rom(...put(rom));
-    ex.reset();
+    const attach = (id, e) => {
+      const ctx = document.getElementById(id).getContext("2d");
+      return { ...e, ctx, img: ctx.createImageData(160, 144) };
+    };
+    const screens = [
+      attach("gbcv", await bootEmu(`/candidate/${encodeURIComponent(cand)}/gb_emu.wasm`, rom, useboot)),
+    ];
+    if (vs) screens.push(attach("gbcv2", await bootEmu("/leaderboard/demo/gb_emu.wasm", rom, useboot)));
     const cv = document.getElementById("gbcv");
     cv.tabIndex = 0; cv.focus();
-    const ctx = cv.getContext("2d");
-    const img = ctx.createImageData(160, 144);
-    status.textContent = `playing ${file.name} — click the screen, then use the keys`;
+    status.textContent = `playing ${file.name} — click the left screen, then use the keys` +
+      (vs ? " (both run the same input — watch where they diverge)" : "");
     const frame = () => {
-      ex.set_keys(playMask); ex.run_frame();
-      const ptr = ex.framebuffer();
-      img.data.set(mem().subarray(ptr, ptr + 160 * 144 * 4));
-      ctx.putImageData(img, 0, 0);
+      for (const s of screens) {
+        s.ex.set_keys(playMask); s.ex.run_frame();
+        const ptr = s.ex.framebuffer();
+        s.img.data.set(s.mem().subarray(ptr, ptr + 160 * 144 * 4));
+        s.ctx.putImageData(s.img, 0, 0);
+      }
       playRAF = requestAnimationFrame(frame);
     };
     playRAF = requestAnimationFrame(frame);
@@ -339,11 +355,19 @@ const views = {
       <input type="file" id="rom" accept=".gb,.gbc,.bin" />
       <label style="margin-top:10px"><input type="checkbox" id="useboot" checked />
         boot the open boot ROM first (recommended)</label>
+      <label><input type="checkbox" id="vsref" checked />
+        show the reference emulator alongside (same input) to compare</label>
       <br><button class="act" id="go" ${arts.length ? "" : "disabled"}>▶ Load &amp; play</button>
       <p class="hint" id="plstatus"></p>
-      <div class="cmp"><figure><canvas class="gb" id="gbcv" width="160" height="144"></canvas></figure></div>
+      <div class="cmp">
+        <figure><figcaption>candidate</figcaption>
+          <canvas class="gb" id="gbcv" width="160" height="144"></canvas></figure>
+        <figure id="refpane" style="display:none"><figcaption>reference (oracle-equivalent, ~1.0 vs oracle)</figcaption>
+          <canvas class="gb" id="gbcv2" width="160" height="144"></canvas></figure>
+      </div>
       <p class="hint">Keys: arrows = D-pad · <b>Z</b> = A · <b>X</b> = B · <b>Enter</b> = Start ·
-        <b>Shift</b> = Select. Click the screen first so it has keyboard focus.</p>`;
+        <b>Shift</b> = Select. Click the left screen first so it has keyboard focus; both screens
+        receive the same input.</p>`;
     const go = document.getElementById("go");
     if (go) go.onclick = startPlay;
   },
