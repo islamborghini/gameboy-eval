@@ -404,6 +404,9 @@ const views = {
         c.best_score != null ? ` — ${Number(c.best_score).toFixed(3)}` : ""}</option>`).join("")}</select>
       <label>ROM file (.gb)</label>
       <input type="file" id="rom" accept=".gb,.gbc,.bin" />
+      <p class="hint">No ROM? Download a free homebrew Game Boy game from the
+        <a href="https://hh.gbdev.io/search?platform=GB&amp;typetag=game" target="_blank" rel="noopener">gbdev Homebrew Hub ↗</a>,
+        then pick the downloaded <code>.gb</code> file here.</p>
       <label style="margin-top:10px"><input type="checkbox" id="useboot" checked />
         boot the open boot ROM first (recommended)</label>
       <label><input type="checkbox" id="vsref" checked />
