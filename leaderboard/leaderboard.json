@@ -17,6 +17,16 @@
       }
     },
     {
+      "name": "claude-opus-4.8",
+      "overall": 0.895467,
+      "band": "Near-reference",
+      "sections": {
+        "replay": 0.996836,
+        "audio": 0.686828,
+        "procedural": 0.8
+      }
+    },
+    {
       "name": "rboy",
       "overall": 0.8,
       "band": "Mostly playable",

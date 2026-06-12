@@ -1,0 +1,44 @@
+{
+  "candidate": "anthropic/claude-opus-4.8",
+  "overall": 0.895467,
+  "band": "Near-reference",
+  "weights": {
+    "replay": 0.6,
+    "audio": 0.2,
+    "procedural": 0.2
+  },
+  "sections": {
+    "replay": 0.996836,
+    "audio": 0.686828,
+    "procedural": 0.8
+  },
+  "detail": {
+    "procedural": [
+      {
+        "name": "dmg-acid2.gb",
+        "defect": 0.34497,
+        "pass": false
+      },
+      {
+        "name": "01-special.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "06-ld r,r.gb",
+        "defect": 0.0,
+        "pass": true
+      },
+      {
+        "name": "instr_timing.gb",
+        "defect": 0.01534,
+        "pass": true
+      },
+      {
+        "name": "mem_timing.gb",
+        "defect": 0.0,
+        "pass": true
+      }
+    ]
+  }
+}
