@@ -13,6 +13,20 @@ const postJSON = async (u, body) =>
 
 // --- job runner: stream a command's output into the page -------------------
 let pollTimer = null;
+let clipTimer = null;
+
+// fetch a server-rendered clip and decode its base64 PNGs into <img> frames.
+async function loadClip(target, rom, frames, statusEl) {
+  statusEl.textContent = `rendering ${target}…`;
+  const d = await getJSON(`/api/clip?target=${encodeURIComponent(target)}` +
+                          `&rom=${encodeURIComponent(rom)}&frames=${frames}`);
+  if (d.error && !(d.frames || []).length) { statusEl.textContent = "error: " + d.error; return { imgs: [] }; }
+  const imgs = await Promise.all((d.frames || []).map((b) => new Promise((res) => {
+    const im = new Image(); im.onload = () => res(im); im.src = "data:image/png;base64," + b;
+  })));
+  statusEl.textContent = d.error ? `${imgs.length} frames · stopped: ${d.error}` : `${imgs.length} frames`;
+  return { imgs };
+}
 
 async function runJob(action, params, anchorEl) {
   if (anchorEl) anchorEl.disabled = true;
@@ -182,16 +196,64 @@ const views = {
       views.provider();
     };
   },
+
+  async compare() {
+    main.innerHTML = `<h2>Compare</h2><div id="cmp">loading…</div>`;
+    const [cands, roms] = await Promise.all([getJSON("/api/candidates"), getJSON("/api/roms")]);
+    const arts = cands.filter((c) => c.artifact);
+    const opt = (v, label, sel) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(label)}</option>`;
+    const sideOpts = (sel) => [opt("oracle", "SameBoy oracle (reference)", sel)]
+      .concat(arts.map((c) => opt(c.name, c.name, sel))).join("");
+    const romOpts = roms.map((r) => opt(r.key, r.label, "")).join("");
+    document.getElementById("cmp").innerHTML = `
+      <p class="hint">Runs the real emulators server-side (the grader's own drivers — SameBoy via
+        libretro for the oracle, wasmtime for a candidate) and plays the frames here. Same ROM
+        on both sides, no input sent. A candidate that traps shows its partial output + why.</p>
+      <div class="row">
+        <div><label>Left (model)</label><select id="left">${sideOpts(arts.length ? arts[0].name : "oracle")}</select></div>
+        <div><label>Right (oracle)</label><select id="right">${sideOpts("oracle")}</select></div>
+        <div><label>ROM</label><select id="rom">${romOpts}</select></div>
+        <div><label>Frames</label><input id="frames" type="number" value="180" min="1" max="600" style="min-width:90px" /></div>
+      </div>
+      ${romOpts ? "" : `<p class="hint">No ROMs found — run “Fetch test ROMs” on the Dashboard.</p>`}
+      ${arts.length ? "" : `<p class="hint">No candidate artifacts yet — generate one to put a model on the left.</p>`}
+      <br><button class="act" id="play" ${romOpts ? "" : "disabled"}>▶ Run comparison</button>
+      <div class="cmp">
+        <figure><figcaption id="lcap">left</figcaption>
+          <canvas class="gb" id="lcv" width="160" height="144"></canvas><div class="err" id="lerr"></div></figure>
+        <figure><figcaption id="rcap">right</figcaption>
+          <canvas class="gb" id="rcv" width="160" height="144"></canvas><div class="err" id="rerr"></div></figure>
+      </div>`;
+    document.getElementById("play").onclick = async (e) => {
+      e.target.disabled = true;
+      clearInterval(clipTimer);
+      const rom = document.getElementById("rom").value;
+      const frames = document.getElementById("frames").value;
+      const L = document.getElementById("left").value, R = document.getElementById("right").value;
+      document.getElementById("lcap").textContent = L;
+      document.getElementById("rcap").textContent = R;
+      const lctx = document.getElementById("lcv").getContext("2d");
+      const rctx = document.getElementById("rcv").getContext("2d");
+      const left = await loadClip(L, rom, frames, document.getElementById("lerr"));
+      const right = await loadClip(R, rom, frames, document.getElementById("rerr"));
+      e.target.disabled = false;
+      if (!left.imgs.length && !right.imgs.length) return;
+      const draw = (ctx, c, i) => { if (c.imgs.length) ctx.drawImage(c.imgs[Math.min(i, c.imgs.length - 1)], 0, 0); };
+      let i = 0, n = Math.max(left.imgs.length, right.imgs.length);
+      clipTimer = setInterval(() => { draw(lctx, left, i); draw(rctx, right, i); if (++i >= n) i = 0; }, 1000 / 30);
+    };
+  },
 };
 
 // --- nav -------------------------------------------------------------------
 const MENU = [["dashboard", "Dashboard"], ["generate", "Generate"], ["grade", "Grade"],
-              ["candidates", "Candidates"], ["leaderboard", "Leaderboard"],
+              ["candidates", "Candidates"], ["compare", "Compare"], ["leaderboard", "Leaderboard"],
               ["provider", "Provider"]];
 
 const nav = document.getElementById("nav");
 function show(key, btn) {
   clearInterval(pollTimer);
+  clearInterval(clipTimer);
   [...nav.children].forEach((b) => b.classList.toggle("active", b === btn));
   views[key]();
 }

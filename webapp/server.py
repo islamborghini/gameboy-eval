@@ -34,6 +34,23 @@ CTYPES = {".html": "text/html", ".js": "application/javascript", ".json": "appli
           ".css": "text/css", ".wasm": "application/wasm", ".gb": "application/octet-stream",
           ".bin": "application/octet-stream"}
 
+# The compare viewer runs a real emulator server-side (oracle or candidate) and ships PNG
+# frames to the browser. Heavy + uses the ctypes SameBoy core, so serialize clip builds.
+CLIP_LOCK = threading.Lock()
+MAX_CLIP_FRAMES = 600
+
+# ROMs offered in the compare viewer — first existing path per key wins (homebrew/open only).
+ROMS = {
+    "dmg-acid2": ("dmg-acid2 — PPU visual test (static)", [
+        ROOT / "data/test-roms/dmg-acid2/dmg-acid2.gb",
+        ROOT / "leaderboard/demo/dmg-acid2.gb",
+        ROOT / "oracle/SameBoy/.github/actions/dmg-acid2.gb"]),
+    "cpu_instrs": ("blargg cpu_instrs — scrolling text (moving)", [
+        ROOT / "data/test-roms/blargg/cpu_instrs/cpu_instrs.gb"]),
+    "instr_timing": ("blargg instr_timing", [
+        ROOT / "data/test-roms/blargg/instr_timing/instr_timing.gb"]),
+}
+
 
 # --------------------------------------------------------------------------- jobs
 
@@ -174,6 +191,71 @@ def leaderboard() -> dict | None:
     return json.loads(f.read_text()) if f.exists() else None
 
 
+# --------------------------------------------------------------------------- compare viewer
+
+def resolve_rom(key: str) -> Path | None:
+    for p in ROMS.get(key, ("", []))[1]:
+        if p.exists():
+            return p
+    return None
+
+
+def available_roms() -> list[dict]:
+    return [{"key": k, "label": lab}
+            for k, (lab, paths) in ROMS.items() if any(p.exists() for p in paths)]
+
+
+def _emu_path():
+    for sub in ("oracle", "grader"):
+        p = str(ROOT / sub)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+
+def build_clip(target: str, rom_key: str, frames: int) -> dict:
+    """Run the oracle or a candidate for N frames and return them as base64 PNGs.
+
+    `target` is "oracle" (SameBoy via libretro) or a candidate dir (its gb_emu.wasm via
+    wasmtime) — the same driver classes the grader uses. Captures partial frames and a clear
+    error string if a candidate traps, so a broken model is still watchable.
+    """
+    frames = max(1, min(frames, MAX_CLIP_FRAMES))
+    rom_path = resolve_rom(rom_key)
+    if not rom_path:
+        raise ValueError("unknown or unavailable ROM")
+    if target != "oracle" and not (ROOT / "candidates" / target / "gb_emu.wasm").exists():
+        raise ValueError("unknown candidate")
+
+    _emu_path()
+    import base64
+    import io
+
+    from PIL import Image
+
+    rom = rom_path.read_bytes()
+    out: list[str] = []
+    err = None
+    with CLIP_LOCK:
+        try:
+            if target == "oracle":
+                from sameboy import OracleEmu
+                emu = OracleEmu()
+            else:
+                from runner import WasmEmu
+                emu = WasmEmu(str(ROOT / "candidates" / target / "gb_emu.wasm"))
+            emu.load(rom, None)
+            emu.reset()
+            for _ in range(frames):
+                emu.set_keys(0)
+                emu.run_frame()
+                buf = io.BytesIO()
+                Image.fromarray(emu.framebuffer(), "RGBA").save(buf, "PNG")
+                out.append(base64.b64encode(buf.getvalue()).decode())
+        except Exception as e:  # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+    return {"frames": out, "count": len(out), "w": 160, "h": 144, "error": err}
+
+
 # --------------------------------------------------------------------------- http
 
 class Handler(BaseHTTPRequestHandler):
@@ -226,6 +308,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(candidates())
         if path == "/api/leaderboard":
             return self._json(leaderboard())
+        if path == "/api/roms":
+            return self._json(available_roms())
+        if path == "/api/clip":
+            target = (q.get("target") or ["oracle"])[0]
+            rom = (q.get("rom") or [""])[0]
+            fr = int((q.get("frames") or ["180"])[0])
+            try:
+                return self._json(build_clip(target, rom, fr))
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
         if path == "/api/log":
             jid = (q.get("id") or [""])[0]
             off = int((q.get("offset") or ["0"])[0])
@@ -266,8 +358,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    want = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    srv = None
+    for port in range(want, want + 10):       # skip past an already-bound port
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            break
+        except OSError:
+            print(f"port {port} in use, trying {port + 1}…")
+    if srv is None:
+        sys.exit(f"no free port in {want}–{want + 9}; pass one: webapp/server.py <port>")
     print(f"gameboy-eval control panel → http://127.0.0.1:{port}  (Ctrl-C to stop)")
     try:
         srv.serve_forever()

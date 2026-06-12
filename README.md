@@ -78,8 +78,9 @@ extra dependencies, localhost-only:
 ```
 
 Menu: **Dashboard** (prerequisite checks) · **Generate** · **Grade** · **Candidates** ·
-**Leaderboard** · **Provider** (set an OpenRouter / OpenAI-compatible key for the session,
-held in memory only). It shells out to the CLIs above and streams their output live.
+**Compare** (play a model's emulator next to the SameBoy oracle on the same ROM, side by
+side) · **Leaderboard** · **Provider** (set an OpenRouter / OpenAI-compatible key for the
+session, held in memory only). It shells out to the CLIs above and streams their output live.
 
 ## Layout
 
