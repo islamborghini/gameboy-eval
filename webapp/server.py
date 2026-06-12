@@ -24,8 +24,12 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(__file__).resolve().parent
 PY = sys.executable  # the interpreter running us — launch via .venv/bin/python to inherit deps
 
-# Provider env overlaid onto spawned jobs (in-memory only; never persisted to disk).
+# Provider config: persisted to disk (gitignored — holds API keys) and reloaded on restart.
+# PROVIDER_CFG is the saved settings; PROVIDER_ENV is what we overlay onto spawned jobs.
+PROVIDER_FILE = WEB / "provider.json"
+PROVIDER_CFG: dict[str, str] = {}
 PROVIDER_ENV: dict[str, str] = {}
+DEFAULT_OLLAMA = "http://127.0.0.1:11434"
 
 JOBS: dict[str, "Job"] = {}
 LOCK = threading.Lock()
@@ -131,20 +135,58 @@ def build_argv(action: str, p: dict) -> tuple[str, list[str]]:
 
 # --------------------------------------------------------------------------- status
 
+def apply_provider_env() -> None:
+    """Make the saved provider authoritative for spawned jobs by overlaying its vars and
+    blanking the others, so the precedence in providers.py resolves to the chosen one."""
+    PROVIDER_ENV.clear()
+    if not PROVIDER_CFG.get("provider"):
+        return  # nothing saved -> let jobs inherit the shell env (back-compat)
+    p = PROVIDER_CFG["provider"]
+    PROVIDER_ENV.update({"OPENROUTER_API_KEY": "", "OPENAI_BASE_URL": "", "OPENAI_API_KEY": ""})
+    if p == "openrouter":
+        PROVIDER_ENV["OPENROUTER_API_KEY"] = PROVIDER_CFG.get("openrouter_key", "")
+    elif p == "openai":
+        PROVIDER_ENV["OPENAI_BASE_URL"] = PROVIDER_CFG.get("openai_base_url", "")
+        PROVIDER_ENV["OPENAI_API_KEY"] = PROVIDER_CFG.get("openai_key", "")
+    if PROVIDER_CFG.get("ollama_url"):
+        PROVIDER_ENV["OLLAMA_URL"] = PROVIDER_CFG["ollama_url"]
+
+
+def load_provider_cfg() -> None:
+    global PROVIDER_CFG
+    try:
+        PROVIDER_CFG = json.loads(PROVIDER_FILE.read_text()) if PROVIDER_FILE.exists() else {}
+    except Exception:  # noqa: BLE001
+        PROVIDER_CFG = {}
+    apply_provider_env()
+
+
+def save_provider_cfg() -> None:
+    try:
+        PROVIDER_FILE.write_text(json.dumps(PROVIDER_CFG, indent=2))
+    except Exception as e:  # noqa: BLE001
+        print(f"could not persist provider config: {e!r}")
+
+
 def provider_status() -> dict:
-    env = {**os.environ, **PROVIDER_ENV}
-    if env.get("OPENROUTER_API_KEY"):
-        active = "openrouter"
-    elif env.get("OPENAI_BASE_URL"):
-        active = "openai-compatible"
-    else:
-        active = "ollama"
+    if PROVIDER_CFG.get("provider"):                # an explicit saved choice wins
+        c = PROVIDER_CFG
+        return {
+            "active": c["provider"], "saved": True,
+            "openrouter_key_set": bool(c.get("openrouter_key")),
+            "openai_base_url": c.get("openai_base_url", ""),
+            "openai_key_set": bool(c.get("openai_key")),
+            "ollama_url": c.get("ollama_url", "") or DEFAULT_OLLAMA,
+        }
+    env = {**os.environ, **PROVIDER_ENV}            # else infer from the environment
+    active = ("openrouter" if env.get("OPENROUTER_API_KEY")
+              else "openai" if env.get("OPENAI_BASE_URL") else "ollama")
     return {
-        "active": active,
+        "active": active, "saved": False,
         "openrouter_key_set": bool(env.get("OPENROUTER_API_KEY")),
         "openai_base_url": env.get("OPENAI_BASE_URL") or "",
         "openai_key_set": bool(env.get("OPENAI_API_KEY")),
-        "ollama_url": env.get("OLLAMA_URL") or "http://127.0.0.1:11434",
+        "ollama_url": env.get("OLLAMA_URL") or DEFAULT_OLLAMA,
     }
 
 
@@ -380,20 +422,30 @@ class Handler(BaseHTTPRequestHandler):
                 job.stop()
             return self._json({"ok": bool(job)})
         if path == "/api/provider":
-            for field, var in (("openrouter_key", "OPENROUTER_API_KEY"),
-                               ("openai_base_url", "OPENAI_BASE_URL"),
-                               ("openai_key", "OPENAI_API_KEY"),
-                               ("ollama_url", "OLLAMA_URL")):
-                val = (body.get(field) or "").strip()
-                if val:
-                    PROVIDER_ENV[var] = val
-                else:
-                    PROVIDER_ENV.pop(var, None)
+            if body.get("clear"):                       # delete all saved provider settings
+                PROVIDER_CFG.clear()
+                PROVIDER_FILE.unlink(missing_ok=True)
+                apply_provider_env()
+                return self._json(provider_status())
+            PROVIDER_CFG["provider"] = (body.get("provider") or "ollama").strip()
+            secret = {"openrouter_key", "openai_key"}
+            for f in ("openrouter_key", "openai_base_url", "openai_key", "ollama_url"):
+                if f not in body:
+                    continue                            # field not shown for this provider — keep
+                v = (body.get(f) or "").strip()
+                if v:
+                    PROVIDER_CFG[f] = v                 # edited
+                elif f not in secret:
+                    PROVIDER_CFG.pop(f, None)           # blank url = cleared
+                # blank secret = keep the saved key (it is never echoed back to the form)
+            save_provider_cfg()
+            apply_provider_env()
             return self._json(provider_status())
         self.send_error(404)
 
 
 def main():
+    load_provider_cfg()                     # restore persisted provider settings
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     srv = None
     for port in range(want, want + 10):       # skip past an already-bound port

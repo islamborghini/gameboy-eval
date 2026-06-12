@@ -21,6 +21,8 @@ __pycache__/
 *.log
 scores.json.tmp
 /scores.json
+# persisted provider settings — holds API keys, never commit
+/webapp/provider.json
 
 # --- Local-only design notes (kept on device, not published) ---
 /EMU-EVAL-DESIGN.md

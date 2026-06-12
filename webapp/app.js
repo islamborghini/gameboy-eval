@@ -294,28 +294,48 @@ const views = {
   async provider() {
     main.innerHTML = `<h2>Provider</h2><div id="pv">loading…</div>`;
     const p = await getJSON("/api/status").then((s) => s.provider);
+    const opt = (v, label) => `<option value="${v}"${v === p.active ? " selected" : ""}>${label}</option>`;
     document.getElementById("pv").innerHTML = `
-      <p class="hint">Held in memory for spawned jobs only — never written to disk. Precedence:
-        OpenRouter → OpenAI-compatible → Ollama. Leave a field blank to clear it.</p>
-      <div class="kv"><b>active</b> <span class="badge">${esc(p.active)}</span></div>
-      <label>OpenRouter API key ${p.openrouter_key_set ? "(set)" : ""}</label>
-      <input id="ork" type="password" placeholder="sk-or-..." />
-      <label>OpenAI-compatible base URL</label>
-      <input id="obu" value="${esc(p.openai_base_url)}" placeholder="https://host/v1" />
-      <label>OpenAI-compatible API key ${p.openai_key_set ? "(set)" : ""}</label>
-      <input id="ok" type="password" placeholder="sk-..." />
-      <label>Ollama URL</label>
-      <input id="olu" value="${esc(p.ollama_url)}" />
-      <br><button class="act" id="save">Save</button>`;
+      <p class="hint">Choose a provider and save its settings — they're <b>persisted to disk</b>
+        and reloaded on restart, remembered until you edit or clear them. Only the selected
+        provider is used.${p.saved ? "" : " (nothing saved yet — showing what's in the environment.)"}</p>
+      <label>Provider</label>
+      <select id="prov">
+        ${opt("ollama", "Ollama (local)")}${opt("openrouter", "OpenRouter")}${opt("openai", "OpenAI-compatible")}
+      </select>
+      <div id="fields"></div>
+      <br><button class="act" id="save">Save</button>
+      <button class="act" id="clear" style="margin-left:8px">Clear saved</button>`;
+    const renderFields = () => {
+      const prov = document.getElementById("prov").value;
+      const saved = (set) => set ? "<b>(saved — leave blank to keep)</b>" : "";
+      document.getElementById("fields").innerHTML =
+        prov === "ollama" ? `
+          <label>Ollama URL</label>
+          <input id="olu" value="${esc(p.ollama_url)}" placeholder="http://127.0.0.1:11434" />`
+        : prov === "openrouter" ? `
+          <label>OpenRouter API key ${saved(p.openrouter_key_set)}</label>
+          <input id="ork" type="password" placeholder="sk-or-..." autocomplete="off" />`
+        : `
+          <label>Base URL</label>
+          <input id="obu" value="${esc(p.openai_base_url)}" placeholder="https://host/v1" />
+          <label>API key ${saved(p.openai_key_set)}</label>
+          <input id="ok" type="password" placeholder="sk-..." autocomplete="off" />`;
+    };
+    document.getElementById("prov").onchange = renderFields;
+    renderFields();
     document.getElementById("save").onclick = async (e) => {
       e.target.disabled = true;
-      await postJSON("/api/provider", {
-        openrouter_key: document.getElementById("ork").value,
-        openai_base_url: document.getElementById("obu").value,
-        openai_key: document.getElementById("ok").value,
-        ollama_url: document.getElementById("olu").value,
-      });
+      const prov = document.getElementById("prov").value;
+      const body = { provider: prov };
+      if (prov === "ollama") body.ollama_url = document.getElementById("olu").value;
+      else if (prov === "openrouter") body.openrouter_key = document.getElementById("ork").value;
+      else { body.openai_base_url = document.getElementById("obu").value; body.openai_key = document.getElementById("ok").value; }
+      await postJSON("/api/provider", body);
       views.provider();
+    };
+    document.getElementById("clear").onclick = async () => {
+      if (confirm("Clear all saved provider settings?")) { await postJSON("/api/provider", { clear: true }); views.provider(); }
     };
   },
 
@@ -372,6 +392,7 @@ const views = {
     cancelPlay();
     main.innerHTML = `<h2>Play</h2><div id="pl">loading…</div>`;
     const arts = (await getJSON("/api/candidates")).filter((c) => c.artifact);
+    const modelOf = Object.fromEntries(arts.map((c) => [c.name, c.model || c.name]));
     document.getElementById("pl").innerHTML = `
       <p class="hint">The real playability test: run a candidate's emulator in your browser with
         live keyboard input. Pick a candidate, choose a Game Boy ROM from your computer
@@ -392,7 +413,7 @@ const views = {
       <br><button class="act" id="go" ${arts.length ? "" : "disabled"}>▶ Load &amp; play</button>
       <p class="hint" id="plstatus"></p>
       <div class="cmp">
-        <figure><figcaption>candidate</figcaption>
+        <figure><figcaption id="candcap">${arts.length ? esc(modelOf[arts[0].name]) : "candidate"}</figcaption>
           <canvas class="gb" id="gbcv" width="160" height="144"></canvas></figure>
         <figure id="refpane" style="display:none"><figcaption>reference (≈ oracle)</figcaption>
           <canvas class="gb" id="gbcv2" width="160" height="144"></canvas></figure>
@@ -400,6 +421,10 @@ const views = {
       <p class="hint">Keys: arrows = D-pad · <b>Z</b> = A · <b>X</b> = B · <b>Enter</b> = Start ·
         <b>Shift</b> = Select. Click the left screen first so it has keyboard focus; both screens
         receive the same input.</p>`;
+    const cand = document.getElementById("cand");
+    if (cand) cand.onchange = () => {
+      document.getElementById("candcap").textContent = modelOf[cand.value] || "candidate";
+    };
     const go = document.getElementById("go");
     if (go) go.onclick = startPlay;
   },
