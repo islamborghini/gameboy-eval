@@ -293,7 +293,7 @@ const views = {
 
   async provider() {
     main.innerHTML = `<h2>Provider</h2><div id="pv">loading…</div>`;
-    const p = await getJSON("/api/status").then((s) => s.provider);
+    const p = await getJSON("/api/provider");
     const opt = (v, label) => `<option value="${v}"${v === p.active ? " selected" : ""}>${label}</option>`;
     document.getElementById("pv").innerHTML = `
       <p class="hint">Choose a provider and save its settings — they're <b>persisted to disk</b>

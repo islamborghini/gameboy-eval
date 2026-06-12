@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -190,16 +191,30 @@ def provider_status() -> dict:
     }
 
 
-def docker_state() -> tuple[bool, bool]:
-    """(docker running?, gameboy-eval-gen image built?) — best-effort, short timeouts."""
+# `docker info` is slow (seconds) on macOS, so never block a request on it: refresh in the
+# background every ~20s and always answer instantly from the last result.
+_DOCKER_CACHE = {"t": 0.0, "val": (False, False), "busy": False}
+
+
+def _refresh_docker() -> None:
     try:
-        if subprocess.run(["docker", "info"], capture_output=True, timeout=6).returncode != 0:
-            return False, False
-        img = subprocess.run(["docker", "images", "-q", "gameboy-eval-gen"],
-                             capture_output=True, text=True, timeout=6)
-        return True, bool(img.stdout.strip())
+        if subprocess.run(["docker", "info"], capture_output=True, timeout=8).returncode != 0:
+            val = (False, False)
+        else:
+            img = subprocess.run(["docker", "images", "-q", "gameboy-eval-gen"],
+                                 capture_output=True, text=True, timeout=8)
+            val = (True, bool(img.stdout.strip()))
     except Exception:  # noqa: BLE001
-        return False, False
+        val = (False, False)
+    _DOCKER_CACHE.update(t=time.time(), val=val, busy=False)
+
+
+def docker_state() -> tuple[bool, bool]:
+    """(docker running?, gameboy-eval-gen image built?), cached + refreshed off the hot path."""
+    if not _DOCKER_CACHE["busy"] and time.time() - _DOCKER_CACHE["t"] >= 20:
+        _DOCKER_CACHE["busy"] = True
+        threading.Thread(target=_refresh_docker, daemon=True).start()
+    return _DOCKER_CACHE["val"]
 
 
 def status() -> dict:
@@ -386,6 +401,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(candidates())
         if path == "/api/leaderboard":
             return self._json(leaderboard())
+        if path == "/api/provider":                 # cheap: provider settings only (no docker)
+            return self._json(provider_status())
         if path == "/api/roms":
             return self._json(available_roms())
         if path == "/api/clip":
@@ -455,6 +472,7 @@ class QuietServer(ThreadingHTTPServer):
 
 def main():
     load_provider_cfg()                     # restore persisted provider settings
+    docker_state()                          # kick off the background docker probe so it's warm
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     srv = None
     for port in range(want, want + 10):       # skip past an already-bound port
