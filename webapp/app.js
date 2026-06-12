@@ -91,6 +91,57 @@ async function runJob(action, params, anchorEl) {
   }, 1000);
 }
 
+// --- in-browser player: run a candidate's wasm with live keyboard input -----
+// Drives the spec/ABI.md exports (same as the grader's WasmEmu), but interactively. The ROM is
+// read locally from a file picker — nothing is uploaded to the server.
+const PLAY_KEYS = { ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7,
+                    z: 0, x: 1, Shift: 2, Enter: 3 };
+let playMask = 0, playRAF = null;
+function cancelPlay() { if (playRAF) cancelAnimationFrame(playRAF); playRAF = null; }
+addEventListener("keydown", (e) => {
+  if (playRAF != null && e.key in PLAY_KEYS) { playMask |= 1 << PLAY_KEYS[e.key]; e.preventDefault(); }
+});
+addEventListener("keyup", (e) => { if (e.key in PLAY_KEYS) playMask &= ~(1 << PLAY_KEYS[e.key]); });
+
+async function startPlay() {
+  cancelPlay();
+  const status = document.getElementById("plstatus");
+  const file = document.getElementById("rom").files[0];
+  if (!file) { status.textContent = "Choose a .gb ROM file first."; return; }
+  status.textContent = "loading…";
+  try {
+    const rom = new Uint8Array(await file.arrayBuffer());
+    const cand = document.getElementById("cand").value;
+    const { instance } = await WebAssembly.instantiateStreaming(
+      fetch(`/candidate/${encodeURIComponent(cand)}/gb_emu.wasm`), {});
+    const ex = instance.exports;
+    const mem = () => new Uint8Array(ex.memory.buffer);
+    const put = (b) => { const p = ex.alloc(b.length); mem().set(b, p); return [p, b.length]; };
+    ex.init?.();
+    if (document.getElementById("useboot").checked && ex.load_boot_rom) {
+      const boot = new Uint8Array(await (await fetch("/leaderboard/demo/boot_rom.bin")).arrayBuffer());
+      ex.load_boot_rom(...put(boot));
+    }
+    ex.load_rom(...put(rom));
+    ex.reset();
+    const cv = document.getElementById("gbcv");
+    cv.tabIndex = 0; cv.focus();
+    const ctx = cv.getContext("2d");
+    const img = ctx.createImageData(160, 144);
+    status.textContent = `playing ${file.name} — click the screen, then use the keys`;
+    const frame = () => {
+      ex.set_keys(playMask); ex.run_frame();
+      const ptr = ex.framebuffer();
+      img.data.set(mem().subarray(ptr, ptr + 160 * 144 * 4));
+      ctx.putImageData(img, 0, 0);
+      playRAF = requestAnimationFrame(frame);
+    };
+    playRAF = requestAnimationFrame(frame);
+  } catch (err) {
+    status.textContent = "failed: " + err;
+  }
+}
+
 // --- views -----------------------------------------------------------------
 const views = {
   async dashboard() {
@@ -270,18 +321,45 @@ const views = {
       clipTimer = setInterval(() => { draw(lctx, left, i); draw(rctx, right, i); if (++i >= n) i = 0; }, 1000 / 30);
     };
   },
+
+  async play() {
+    cancelPlay();
+    main.innerHTML = `<h2>Play</h2><div id="pl">loading…</div>`;
+    const arts = (await getJSON("/api/candidates")).filter((c) => c.artifact);
+    document.getElementById("pl").innerHTML = `
+      <p class="hint">The real playability test: run a candidate's emulator in your browser with
+        live keyboard input. Pick a candidate, choose a Game Boy ROM from your computer
+        (homebrew / legal only — none ship with the repo), and play. The ROM runs locally;
+        nothing is uploaded.</p>
+      ${arts.length ? "" : `<p class="hint">No candidate artifacts yet — generate one first.</p>`}
+      <label>Candidate</label>
+      <select id="cand">${arts.map((c) => `<option value="${esc(c.name)}">${esc(c.name)}${
+        c.best_score != null ? ` — ${Number(c.best_score).toFixed(3)}` : ""}</option>`).join("")}</select>
+      <label>ROM file (.gb)</label>
+      <input type="file" id="rom" accept=".gb,.gbc,.bin" />
+      <label style="margin-top:10px"><input type="checkbox" id="useboot" checked />
+        boot the open boot ROM first (recommended)</label>
+      <br><button class="act" id="go" ${arts.length ? "" : "disabled"}>▶ Load &amp; play</button>
+      <p class="hint" id="plstatus"></p>
+      <div class="cmp"><figure><canvas class="gb" id="gbcv" width="160" height="144"></canvas></figure></div>
+      <p class="hint">Keys: arrows = D-pad · <b>Z</b> = A · <b>X</b> = B · <b>Enter</b> = Start ·
+        <b>Shift</b> = Select. Click the screen first so it has keyboard focus.</p>`;
+    const go = document.getElementById("go");
+    if (go) go.onclick = startPlay;
+  },
 };
 
 // --- nav -------------------------------------------------------------------
 const MENU = [["dashboard", "Dashboard"], ["generate", "Generate"], ["grade", "Grade"],
-              ["candidates", "Candidates"], ["compare", "Compare"], ["leaderboard", "Leaderboard"],
-              ["provider", "Provider"]];
+              ["candidates", "Candidates"], ["compare", "Compare"], ["play", "Play"],
+              ["leaderboard", "Leaderboard"], ["provider", "Provider"]];
 
 const nav = document.getElementById("nav");
 function show(key, btn) {
   clearInterval(pollTimer);
   clearInterval(clipTimer);
   clearTimeout(candTimer);
+  cancelPlay();
   [...nav.children].forEach((b) => b.classList.toggle("active", b === btn));
   views[key]();
 }

@@ -336,6 +336,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(WEB / "app.js")
         if path.startswith("/leaderboard/"):       # the existing static site + its assets
             return self._static(ROOT / "leaderboard", path[len("/leaderboard/"):])
+        if path.startswith("/candidate/"):          # serve a candidate's gb_emu.wasm to the Play page
+            return self._static(ROOT / "candidates", path[len("/candidate/"):])
         if path == "/api/status":
             return self._json(status())
         if path == "/api/candidates":
