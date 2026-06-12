@@ -170,18 +170,46 @@ def status() -> dict:
     }
 
 
+def _safe_model(model: str) -> str:
+    return model.replace(":", "_").replace("/", "_")  # matches generate.py's outdir naming
+
+
+def running_generations() -> set[str]:
+    """safe-model names that currently have a live `harness/generate.py` process."""
+    try:
+        out = subprocess.run(["ps", "-Ao", "command"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:  # noqa: BLE001
+        return set()
+    safes = set()
+    for line in out.splitlines():
+        if "harness/generate.py" not in line:
+            continue
+        toks = line.split()
+        for i, t in enumerate(toks):
+            if t.endswith("generate.py") and i + 1 < len(toks) and not toks[i + 1].startswith("-"):
+                safes.add(_safe_model(toks[i + 1]))
+                break
+    return safes
+
+
 def candidates() -> list[dict]:
+    running = running_generations()
     out = []
     for d in sorted((ROOT / "candidates").glob("*"), reverse=True):
         if not d.is_dir():
             continue
         info = {"name": d.name, "model": None, "best_score": None, "created": None,
-                "artifact": (d / "gb_emu.wasm").exists()}
+                "artifact": (d / "gb_emu.wasm").exists(), "status": "done"}
         meta = d / "meta.json"
-        if meta.exists():
+        if meta.exists():                       # generate.py writes meta.json only at the end
             m = json.loads(meta.read_text())
             info.update(model=m.get("model"), best_score=m.get("best_score"),
                         created=m.get("created"))
+        elif d.name.rsplit("__", 1)[0] in running:
+            info["status"] = "running"
+        else:
+            info["status"] = "stopped"          # no meta + no process = killed/crashed
         out.append(info)
     return out
 

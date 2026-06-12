@@ -14,6 +14,32 @@ const postJSON = async (u, body) =>
 // --- job runner: stream a command's output into the page -------------------
 let pollTimer = null;
 let clipTimer = null;
+let candTimer = null;
+
+// Candidates table — re-fetches itself every few seconds while a run is in progress, so the
+// status column (running / done / stopped) stays live without a manual refresh.
+const STATUS_CLASS = { running: "running", stopped: "failed", done: "" };
+
+async function drawCandidates() {
+  if (!document.getElementById("c")) return;        // navigated away
+  const rows = await getJSON("/api/candidates");
+  const c = document.getElementById("c");
+  if (!c) return;
+  c.innerHTML = rows.length ? `
+    <table><thead><tr><th>candidate</th><th>status</th><th>model</th><th>best score</th>
+      <th>artifact</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr>
+        <td>${esc(r.name)}</td>
+        <td><span class="badge ${STATUS_CLASS[r.status] ?? ""}">${esc(r.status ?? "—")}</span></td>
+        <td>${esc(r.model ?? "—")}</td>
+        <td>${r.best_score == null ? "—" : Number(r.best_score).toFixed(4)}</td>
+        <td>${r.artifact ? "yes" : "—"}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="hint">Auto-refreshes while a run is in progress.</p>` :
+    `<p class="hint">No candidates yet. Run a generation.</p>`;
+  clearTimeout(candTimer);
+  if (rows.some((r) => r.status === "running")) candTimer = setTimeout(drawCandidates, 3000);
+}
 
 // fetch a server-rendered clip and decode its base64 PNGs into <img> frames.
 async function loadClip(target, rom, frames, statusEl) {
@@ -137,15 +163,7 @@ const views = {
 
   async candidates() {
     main.innerHTML = `<h2>Candidates</h2><div id="c">loading…</div>`;
-    const rows = await getJSON("/api/candidates");
-    document.getElementById("c").innerHTML = rows.length ? `
-      <table><thead><tr><th>candidate</th><th>model</th><th>best score</th>
-        <th>artifact</th></tr></thead><tbody>
-        ${rows.map((c) => `<tr>
-          <td>${esc(c.name)}</td><td>${esc(c.model ?? "—")}</td>
-          <td>${c.best_score == null ? "—" : Number(c.best_score).toFixed(4)}</td>
-          <td>${c.artifact ? "yes" : "—"}</td></tr>`).join("")}
-      </tbody></table>` : `<p class="hint">No candidates yet. Run a generation.</p>`;
+    drawCandidates();
   },
 
   async leaderboard() {
@@ -254,6 +272,7 @@ const nav = document.getElementById("nav");
 function show(key, btn) {
   clearInterval(pollTimer);
   clearInterval(clipTimer);
+  clearTimeout(candTimer);
   [...nav.children].forEach((b) => b.classList.toggle("active", b === btn));
   views[key]();
 }
