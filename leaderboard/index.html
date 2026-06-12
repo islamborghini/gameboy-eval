@@ -36,6 +36,11 @@
   button:disabled { opacity:.5; cursor:default; }
   .foot { color:var(--muted); font-size:12px; margin-top:28px; }
   a { color:#7aa2f7; }
+  .legend { font-size:12px; font-weight:400; color:var(--muted); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px;
+              vertical-align:middle; margin:0 4px 0 12px; }
+  #chart svg { width:100%; height:auto; background:var(--panel);
+               border:1px solid var(--line); border-radius:10px; }
 </style>
 </head>
 <body>
@@ -49,6 +54,9 @@
     <th class="rank">#</th><th>candidate</th><th>overall</th><th>band</th>
     <th class="sections">replay / audio / proc</th>
   </tr></thead><tbody></tbody></table>
+
+  <h2>Composite by section <span class="legend" id="legend"></span></h2>
+  <div id="chart"></div>
 
   <h2>Run a candidate in your browser</h2>
   <div class="player">

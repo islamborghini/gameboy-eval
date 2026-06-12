@@ -9,9 +9,41 @@ const BANDS = {
   "Doesn't run": "#ef4444",
 };
 
+// Stacked horizontal bar per model: each bar = the three weighted contributions to the
+// composite (0.60·replay + 0.20·audio + 0.20·procedural), so the bar length IS the score and
+// you can see *why* a model ranks where it does (e.g. a missing audio segment).
+const SECTIONS = [["replay", 0.60, "#3b82f6"], ["audio", 0.20, "#a855f7"],
+                  ["procedural", 0.20, "#22c55e"]];
+
+function renderChart(entries) {
+  const W = 680, rowH = 30, padL = 150, padR = 50, padT = 26, padB = 8;
+  const barW = W - padL - padR, H = padT + entries.length * rowH + padB;
+  const x = (v) => padL + v * barW;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="composite score by section">`;
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    s += `<line x1="${x(t)}" y1="${padT - 4}" x2="${x(t)}" y2="${H - padB}" stroke="#272b34"/>` +
+         `<text x="${x(t)}" y="${padT - 10}" fill="#9aa3ad" font-size="10" text-anchor="middle">${t}</text>`;
+  }
+  entries.forEach((e, i) => {
+    const y = padT + i * rowH + 4, h = rowH - 13;
+    s += `<text x="${padL - 8}" y="${y + h / 2 + 4}" fill="#e6e8eb" font-size="12" text-anchor="end">${e.name}</text>`;
+    let cx = padL;
+    for (const [k, w] of SECTIONS) {
+      const wpx = (e.sections[k] || 0) * w * barW;
+      s += `<rect x="${cx.toFixed(2)}" y="${y}" width="${wpx.toFixed(2)}" height="${h}" fill="${SECTIONS.find((q) => q[0] === k)[2]}"/>`;
+      cx += wpx;
+    }
+    s += `<text x="${(cx + 6).toFixed(2)}" y="${y + h / 2 + 4}" fill="#e6e8eb" font-size="11" font-weight="700">${e.overall.toFixed(3)}</text>`;
+  });
+  document.getElementById("chart").innerHTML = s + "</svg>";
+  document.getElementById("legend").innerHTML =
+    SECTIONS.map(([k, w, c]) => `<i style="background:${c}"></i>${k}·${w}`).join("");
+}
+
 async function renderBoard() {
   const data = await (await fetch("leaderboard.json")).json();
   document.getElementById("gen").textContent = data.generated;
+  renderChart(data.entries);
   const tb = document.querySelector("#board tbody");
   data.entries.forEach((e, i) => {
     const s = e.sections;
