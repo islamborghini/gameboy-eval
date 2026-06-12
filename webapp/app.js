@@ -132,6 +132,13 @@ const views = {
         <div><label>or Minutes (continuous; 0 = use iterations)</label>
              <input id="minutes" type="number" value="0" min="0" style="min-width:120px" /></div>
       </div>
+      <label style="margin-top:14px"><input type="checkbox" id="untilbuild" checked />
+        Keep retrying until it builds — build failures don't burn an iteration (recommended)</label>
+      <div><label>Safety cap: max total attempts (until-build mode)</label>
+        <input id="maxiters" type="number" value="15" min="1" style="min-width:120px" /></div>
+      <p class="hint">With this on, <b>Iterations</b> counts only successful builds; the loop keeps
+        fixing compile errors until it builds (or hits the cap). Each attempt is a paid model call,
+        so the cap bounds your spend.</p>
       <p class="hint">Needs Docker running and the <code>gameboy-eval-gen</code> image built:
         <code>docker build -t gameboy-eval-gen -f env/Dockerfile .</code></p>
       <button class="act" id="go">Run generation</button>`;
@@ -139,6 +146,8 @@ const views = {
       model: document.getElementById("model").value,
       iters: document.getElementById("iters").value,
       minutes: document.getElementById("minutes").value,
+      until_build: document.getElementById("untilbuild").checked,
+      max_iters: document.getElementById("maxiters").value,
     }, e.target);
   },
 

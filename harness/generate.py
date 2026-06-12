@@ -10,7 +10,7 @@ A small local model is expected to score ~0 (often failing to even compile). Suc
 the loop itself running cleanly: generate -> build -> grade -> feedback, with a saved
 artifact + meta.json.
 
-    python harness/generate.py [model] [--iters N]
+    python harness/generate.py [model] [--iters N] [--until-build [--max-iters N]]
 """
 from __future__ import annotations
 
@@ -83,7 +83,16 @@ def build_offline(workdir: Path) -> tuple[bool, str]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("model", nargs="?", default=DEFAULT_MODEL)
-    ap.add_argument("--iters", type=int, default=4)
+    ap.add_argument("--iters", type=int, default=4,
+                    help="iterations to run; with --until-build, counts only graded "
+                         "(successful-build) rounds")
+    ap.add_argument("--until-build", action="store_true",
+                    help="don't let build failures consume --iters: keep retrying the build "
+                         "(initially and on later regressions) until it compiles, bounded by "
+                         "--max-iters")
+    ap.add_argument("--max-iters", type=int, default=15,
+                    help="hard cap on TOTAL attempts in --until-build mode (cost guard, since "
+                         "every attempt is a paid model call)")
     ap.add_argument("--minutes", type=float, default=0.0,
                     help="continuous-runtime budget (minutes); the task never 'finishes' "
                          "and overrides --iters")
@@ -103,17 +112,22 @@ def main():
     wasm_path = workdir / "target/wasm32-unknown-unknown/release/gb_emu.wasm"
 
     start = time.time()
-    it = 0
+    it = graded = 0  # graded = attempts that actually built (the rounds --until-build counts)
     while True:
         it += 1
         if args.minutes > 0:
             if (time.time() - start) / 60 >= args.minutes:
                 break
-            print(f"\n===== iteration {it} (continuous {args.minutes:g}min) ({args.model}) =====")
+            tag = f"iteration {it} (continuous {args.minutes:g}min)"
+        elif args.until_build:
+            if graded >= args.iters or it > args.max_iters:
+                break
+            tag = f"iteration {it} (built {graded}/{args.iters}, cap {args.max_iters})"
         else:
             if it > args.iters:
                 break
-            print(f"\n===== iteration {it}/{args.iters} ({args.model}) =====")
+            tag = f"iteration {it}/{args.iters}"
+        print(f"\n===== {tag} ({args.model}) =====")
         # Keep context bounded (system + recent turns) so calls stay fast and don't time out.
         if len(messages) > 7:
             messages = [messages[0]] + messages[-6:]
@@ -123,7 +137,7 @@ def main():
             reply = chat(messages, args.model, timeout=300)
         except Exception as e:  # noqa: BLE001
             print(f"model call failed: {e!r}")
-            if args.minutes > 0:  # continuous: the task never ends — keep going
+            if args.minutes > 0 or args.until_build:  # resilient modes: keep going (capped)
                 feedback = "(previous call failed; keep improving) " + feedback
                 continue
             break
@@ -146,6 +160,7 @@ def main():
             history.append(rec)
             continue
 
+        graded += 1  # compiled — counts as one round toward --iters (in --until-build mode)
         print("  build OK -> grading")
         try:
             report = grade(lambda: WasmEmu(str(wasm_path)), args.model)

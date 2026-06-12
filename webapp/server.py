@@ -110,6 +110,8 @@ def build_argv(action: str, p: dict) -> tuple[str, list[str]]:
             argv += ["--minutes", str(minutes)]
         else:
             argv += ["--iters", str(int(p.get("iters") or 4))]
+            if p.get("until_build"):
+                argv += ["--until-build", "--max-iters", str(int(p.get("max_iters") or 15))]
         return f"generate · {model}", argv
     if action == "grade":
         target = (p.get("target") or "").strip()
