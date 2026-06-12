@@ -1,6 +1,9 @@
-# gameboy-eval
+## gameboy-eval
+
+![gameboy-eval demo](gif.gif)
 
 > An open, free, local-first benchmark that measures how well a coding agent can build a **Game Boy (DMG) emulator** from scratch. Grading is automatic, deterministic, and runs for free on a laptop.
+
 
 ## 1. What is gameboy-eval
 
@@ -12,7 +15,7 @@ It is an open, Game Boy take on the idea behind Mechanize's GBA Eval.
 
 ## 2. Motivation
 
-_Author to write._
+I recently saw the Mechanize Inc's GBA eval and wanted to learn how to do this. I was inspired by the method they used to evaluate the accuracy of LLMs using games. I read all of their published content about the GBA eval and recreated it. All the numbers and ideas are from their website. I only created the Python code and the GUI. 
 
 ## 3. How we grade LLMs
 
