@@ -96,8 +96,31 @@ async function runJob(action, params, anchorEl) {
 // read locally from a file picker — nothing is uploaded to the server.
 const PLAY_KEYS = { ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7,
                     z: 0, x: 1, Shift: 2, Enter: 3 };
-let playMask = 0, playRAF = null;
-function cancelPlay() { if (playRAF) cancelAnimationFrame(playRAF); playRAF = null; }
+let playMask = 0, playRAF = null, audioCtx = null, nextAudioTime = 0;
+function cancelPlay() {
+  if (playRAF) cancelAnimationFrame(playRAF);
+  playRAF = null;
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+}
+
+// queue one run_frame's worth of the candidate's audio (i16 interleaved stereo @ 48kHz) by
+// scheduling a small AudioBuffer right after the previous one — emulator output you can hear.
+function pushAudio(s) {
+  const n = s.ex.audio_len();
+  if (!n) return;
+  const frames = n >> 1;
+  const src = new Int16Array(s.ex.memory.buffer, s.ex.audio(), n);
+  const buf = audioCtx.createBuffer(2, frames, 48000);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < frames; i++) { L[i] = src[2 * i] / 32768; R[i] = src[2 * i + 1] / 32768; }
+  const node = audioCtx.createBufferSource();
+  node.buffer = buf;
+  node.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  if (nextAudioTime < now) nextAudioTime = now + 0.03;   // resync if playback fell behind
+  node.start(nextAudioTime);
+  nextAudioTime += buf.duration;
+}
 addEventListener("keydown", (e) => {
   if (playRAF != null && e.key in PLAY_KEYS) { playMask |= 1 << PLAY_KEYS[e.key]; e.preventDefault(); }
 });
@@ -127,6 +150,10 @@ async function startPlay() {
   const useboot = document.getElementById("useboot").checked;
   const vs = document.getElementById("vsref").checked;
   document.getElementById("refpane").style.display = vs ? "" : "none";
+  if (document.getElementById("sound").checked) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    nextAudioTime = 0;
+  }
   status.textContent = "loading…";
   try {
     const rom = new Uint8Array(await file.arrayBuffer());
@@ -150,6 +177,7 @@ async function startPlay() {
         s.img.data.set(s.mem().subarray(ptr, ptr + 160 * 144 * 4));
         s.ctx.putImageData(s.img, 0, 0);
       }
+      if (audioCtx && screens[0].ex.audio_len) pushAudio(screens[0]);
       playRAF = requestAnimationFrame(frame);
     };
     playRAF = requestAnimationFrame(frame);
@@ -357,6 +385,8 @@ const views = {
         boot the open boot ROM first (recommended)</label>
       <label><input type="checkbox" id="vsref" checked />
         show the reference emulator alongside (same input) to compare</label>
+      <label><input type="checkbox" id="sound" checked />
+        sound — hear the candidate's audio output</label>
       <br><button class="act" id="go" ${arts.length ? "" : "disabled"}>▶ Load &amp; play</button>
       <p class="hint" id="plstatus"></p>
       <div class="cmp">
