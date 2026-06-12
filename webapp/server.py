@@ -70,9 +70,11 @@ class Job:
         env = {**os.environ, **PROVIDER_ENV}
         self.lines.append("$ " + " ".join(self.argv))
         try:
+            # start_new_session detaches the job into its own process group, so a Ctrl-C that
+            # restarts this server doesn't also kill a long-running generation.
             self.proc = subprocess.Popen(
                 self.argv, cwd=ROOT, env=env, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, bufsize=1,
+                stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True,
             )
         except Exception as e:  # noqa: BLE001
             self.lines.append(f"failed to start: {e!r}")
@@ -174,23 +176,24 @@ def _safe_model(model: str) -> str:
     return model.replace(":", "_").replace("/", "_")  # matches generate.py's outdir naming
 
 
-def running_generations() -> set[str]:
-    """safe-model names that currently have a live `harness/generate.py` process."""
+def running_generations() -> dict[str, int]:
+    """safe-model name -> count of live `harness/generate.py` processes for it."""
     try:
         out = subprocess.run(["ps", "-Ao", "command"], capture_output=True,
                              text=True, timeout=5).stdout
     except Exception:  # noqa: BLE001
-        return set()
-    safes = set()
+        return {}
+    counts: dict[str, int] = {}
     for line in out.splitlines():
         if "harness/generate.py" not in line:
             continue
         toks = line.split()
         for i, t in enumerate(toks):
             if t.endswith("generate.py") and i + 1 < len(toks) and not toks[i + 1].startswith("-"):
-                safes.add(_safe_model(toks[i + 1]))
+                safe = _safe_model(toks[i + 1])
+                counts[safe] = counts.get(safe, 0) + 1
                 break
-    return safes
+    return counts
 
 
 def candidates() -> list[dict]:
@@ -206,10 +209,11 @@ def candidates() -> list[dict]:
             m = json.loads(meta.read_text())
             info.update(model=m.get("model"), best_score=m.get("best_score"),
                         created=m.get("created"))
-        elif d.name.rsplit("__", 1)[0] in running:
-            info["status"] = "running"
+        elif running.get(d.name.rsplit("__", 1)[0], 0) > 0:
+            info["status"] = "running"          # newest no-meta dir of a live model claims it
+            running[d.name.rsplit("__", 1)[0]] -= 1
         else:
-            info["status"] = "stopped"          # no meta + no process = killed/crashed
+            info["status"] = "stopped"          # killed/crashed, or an older same-model leftover
         out.append(info)
     return out
 
