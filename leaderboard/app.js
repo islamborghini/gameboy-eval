@@ -18,7 +18,7 @@ function renderChart(entries) {
   }
   entries.forEach((e, i) => {
     const y = padT + i * rowH + 4, h = rowH - 13;
-    s += `<text x="${padL - 8}" y="${y + h / 2 + 4}" fill="#333" font-size="12" text-anchor="end">${e.name}</text>`;
+    s += `<text x="${padL - 8}" y="${y + h / 2 + 4}" fill="#111" font-size="12" text-anchor="end">${e.name}</text>`;
     let cx = padL;
     for (const [k, w] of SECTIONS) {
       const wpx = (e.sections[k] || 0) * w * barW;
@@ -56,8 +56,12 @@ const KEYS = { ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7,
                z: 0, x: 1, Shift: 2, Enter: 3 };
 let keymask = 0;
 
-async function makePlayer() {
-  const { instance } = await WebAssembly.instantiateStreaming(fetch("demo/gb_emu.wasm"), {});
+let rafId = 0; // so switching candidates cancels the previous loop
+
+async function makePlayer(wasmUrl) {
+  cancelAnimationFrame(rafId); // stop any candidate already running
+
+  const { instance } = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {});
   const ex = instance.exports;
   const mem = () => new Uint8Array(ex.memory.buffer);
 
@@ -79,18 +83,28 @@ async function makePlayer() {
     const ptr = ex.framebuffer();
     img.data.set(mem().subarray(ptr, ptr + 160 * 144 * 4));
     ctx.putImageData(img, 0, 0);
-    requestAnimationFrame(frame);
+    rafId = requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 }
 
 addEventListener("keydown", (e) => { if (e.key in KEYS) { keymask |= 1 << KEYS[e.key]; e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key in KEYS) keymask &= ~(1 << KEYS[e.key]); });
 
-document.getElementById("run").addEventListener("click", (e) => {
-  e.target.disabled = true;
-  e.target.textContent = "running…";
-  makePlayer();
+document.getElementById("run").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const cand = document.getElementById("cand").value;
+  btn.disabled = true;
+  btn.textContent = "loading…";
+  try {
+    await makePlayer("artifacts/" + cand);
+    btn.textContent = "Restart";
+  } catch (err) {
+    btn.textContent = "failed";
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 renderBoard();

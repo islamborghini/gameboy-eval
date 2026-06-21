@@ -71,6 +71,7 @@ button {
 }
 button:hover { background: #f5f5f5; }
 button:disabled { opacity: .5; cursor: default; }
+select { font: inherit; padding: 5px 6px; border: 1px solid #333; background: #fff; margin: 0 6px; }
 
 .site-footer {
   margin: 60px auto 30px;
@@ -100,12 +101,21 @@ button:disabled { opacity: .5; cursor: default; }
   <div class="player">
     <canvas id="screen" width="160" height="144"></canvas>
     <div>
-      <p class="ctrl">The graded artifact is a <code>wasm32-unknown-unknown</code> module,
-         and it runs right here. Below is the known-good reference emulator running
-         <code>dmg-acid2</code>.</p>
+      <p class="ctrl">Each graded artifact is a <code>wasm32-unknown-unknown</code> module,
+         and it runs right here on <code>dmg-acid2</code>. Pick a candidate and watch it
+         draw the screen (or fail to).</p>
       <p class="ctrl">Keys: arrows = D-pad, <b>Z</b> = A, <b>X</b> = B,
          <b>Enter</b> = Start, <b>Shift</b> = Select.</p>
-      <button id="run">Run dmg-acid2</button>
+      <p class="ctrl">
+        <label for="cand">Candidate:</label>
+        <select id="cand">
+          <option value="reference.wasm">reference (known-good)</option>
+          <option value="claude-opus-4.8.wasm">claude-opus-4.8</option>
+          <option value="gpt-5.1-codex.wasm">gpt-5.1-codex</option>
+          <option value="gpt-oss-120b.wasm">gpt-oss-120b</option>
+        </select>
+        <button id="run">Run</button>
+      </p>
     </div>
   </div>
 </div>
