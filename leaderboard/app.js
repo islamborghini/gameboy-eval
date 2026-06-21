@@ -28,7 +28,7 @@ function renderChart(entries) {
   });
   document.getElementById("chart").innerHTML = s + "</svg>";
   document.getElementById("legend").innerHTML =
-    SECTIONS.map(([k, w, c]) => `<i style="background:${c}"></i>${k}·${w}`).join("");
+    SECTIONS.map(([k, w, c]) => `<i style="background:${c}"></i>${k}`).join("");
 }
 
 async function renderBoard() {
