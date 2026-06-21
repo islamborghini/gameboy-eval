@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>gameboy-eval — system prompt</title>
 <style>
-/* Minimal "paper" style, matching the landing page. No web fonts. */
 html { scrollbar-gutter: stable; }
 body {
   line-height: 1.4;
@@ -15,36 +14,18 @@ body {
   max-width: 650px;
 }
 #maincontent { max-width: 42em; margin: 15px auto; }
-
 h1 { font-size: 1.7em; margin-bottom: 0.2em; }
-h2 { font-size: 1.2em; margin-top: 1.8em; }
-
 .subtitle { color: #555; margin-top: 0; }
-
 a.plain-link { color: inherit; text-decoration: none; }
 a.plain-link:hover { text-decoration: underline; }
-
-code { background: #f5f5f5; padding: 1px 4px; font-size: 0.9em; }
-
-ul { padding-left: 1.2em; }
-li { margin: 0.6em 0; }
-
-pre {
-  background: #f5f5f5;
-  padding: 12px 14px;
-  overflow-x: auto;
-  font-size: 14px;
+pre.prompt {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
   line-height: 1.5;
-}
-pre code { background: none; padding: 0; font-size: inherit; }
-
-.note {
-  border-left: 2px solid #ccc;
-  padding-left: 14px;
-  color: #555;
   margin: 1.4em 0;
 }
-
 .site-footer {
   margin: 60px auto 30px;
   max-width: 650px;
@@ -57,76 +38,196 @@ pre code { background: none; padding: 0; font-size: inherit; }
 <body>
 <div id="maincontent">
   <h1>System prompt</h1>
-  <p class="subtitle">This is the exact instruction the agent receives. It is the same for every model and provider, so the only variable is the model. The prompt is the task below, followed by the full <a href="abi.html">ABI spec</a>, followed by the response instructions.</p>
+  <p class="subtitle">The exact instruction the agent receives, verbatim. It is identical for every model and provider, so the only variable is the model itself. Assembled in <code>harness/generate.py</code> from the task, the ABI contract, and a short response instruction.</p>
 
-  <div class="note">The prompt is assembled in <code>harness/generate.py</code> as the contents of <code>env/TASK.md</code>, then the <code>spec/ABI.md</code> contract, then a short trailer telling the model how to reply.</div>
+  <pre class="prompt"># TASK — Implement a Game Boy (DMG) emulator from scratch
 
-  <h2>Task</h2>
+You are a senior systems engineer. Your task is to implement an accurate emulator of the
+original Game Boy (model **DMG**) in Rust, compiled to WebAssembly.
 
-  <p>You are a senior systems engineer. Your task is to implement an accurate emulator of the original Game Boy (model DMG) in Rust, compiled to WebAssembly.</p>
+This is a **long-horizon** task. There is no deadline and no reward for finishing quickly.
+Work carefully and incrementally; prefer correctness over coverage. The task does not end —
+keep improving accuracy for as long as you are running. If you believe you are &quot;done&quot;,
+pick the next most-impactful inaccuracy and fix it.
 
-  <p>This is a long-horizon task. There is no deadline and no reward for finishing quickly. Work carefully and incrementally; prefer correctness over coverage. The task does not end. Keep improving accuracy for as long as you are running. If you believe you are "done", pick the next most-impactful inaccuracy and fix it.</p>
+## What you must produce
 
-  <h2>What you must produce</h2>
+A Rust cargo project rooted at `/task/` whose library crate is named `gb_emu` and builds,
+with **exactly**:
 
-  <p>A Rust cargo project rooted at <code>/task/</code> whose library crate is named <code>gb_emu</code> and builds, with exactly:</p>
+    cargo build --release --lib --target wasm32-unknown-unknown
 
-  <pre>cargo build --release --lib --target wasm32-unknown-unknown</pre>
+to `target/wasm32-unknown-unknown/release/gb_emu.wasm`, exporting the ABI specified in
+`/task/spec/ABI.md`. Do **not** add a `.cargo/config.toml`, custom `RUSTFLAGS`, or anything
+that changes the build command or the artifact path. The ABI is the only fixed contract;
+every internal design decision (CPU, PPU, timing, memory mapping, MBCs, APU) is yours.
 
-  <p>to <code>target/wasm32-unknown-unknown/release/gb_emu.wasm</code>, exporting the ABI specified in <code>/task/spec/ABI.md</code>. Do not add a <code>.cargo/config.toml</code>, custom <code>RUSTFLAGS</code>, or anything that changes the build command or the artifact path. The ABI is the only fixed contract; every internal design decision (CPU, PPU, timing, memory mapping, MBCs, APU) is yours.</p>
+## What you are given (read-only)
 
-  <h2>What you are given (read-only)</h2>
-  <ul>
-    <li><code>/task/spec/ABI.md</code> — the exact WASM exports your module must provide.</li>
-    <li><code>/task/spec/pandocs.html</code> — Pan Docs, the community Game Boy hardware reference.</li>
-    <li><code>/task/spec/boot_rom.bin</code> — an open-source DMG boot ROM. Load it via <code>load_boot_rom</code> so that your power-on behavior matches the reference.</li>
-    <li><code>/task/dev-roms/</code> — a handful of homebrew Game Boy ROMs you may use to self-test. (These are for your own debugging; the grading ROMs and input recordings are different and are held out from you.)</li>
-  </ul>
+- `/task/spec/ABI.md` — the exact WASM exports your module must provide.
+- `/task/spec/pandocs.html` — Pan Docs, the community Game Boy hardware reference.
+- `/task/spec/boot_rom.bin` — an open-source DMG boot ROM. Load it via `load_boot_rom`
+  so that your power-on behavior matches the reference.
+- `/task/dev-roms/` — a handful of **homebrew** Game Boy ROMs you may use to self-test.
+  (These are for your own debugging; the grading ROMs and input recordings are different
+  and are held out from you.)
 
-  <h2>Tools available to you</h2>
-  <ul>
-    <li>A normal shell, <code>rustc</code>/<code>cargo</code> with the <code>wasm32-unknown-unknown</code> target, and <code>wasmtime</code>.</li>
-    <li><code>oracle</code> — a command-line client to a reference Game Boy emulator running as a remote black box. You may run any ROM through it and observe its output (framebuffers, audio), but you cannot see its source. Use it as ground truth:
-      <pre>batch:   oracle run &lt;rom&gt; &lt;frames&gt; [--keys &lt;replay.txt&gt;] [--dump-frames &lt;dir&gt;] [--dump-audio &lt;wav&gt;]
-session: oracle session ...   # set-keys / run-frame / framebuffer / audio,
-                              #   shaped exactly like your own ABI, so you can diff
-                              #   your emulator against the reference one frame at a time
-                              #   and localize exactly where you diverge.</pre>
-    </li>
-  </ul>
-  <p>You have no internet access. Everything you need is on disk or behind <code>oracle</code>.</p>
+## Tools available to you
 
-  <h2>How you will be graded (so you know what "good" means)</h2>
+- A normal shell, `rustc`/`cargo` with the `wasm32-unknown-unknown` target, and `wasmtime`.
+- `oracle` — a command-line client to a **reference Game Boy emulator** running as a remote
+  black box. You may run any ROM through it and observe its output (framebuffers, audio),
+  but you cannot see its source. Use it as ground truth:
+    - batch:   `oracle run &lt;rom&gt; &lt;frames&gt; [--keys &lt;replay.txt&gt;] [--dump-frames &lt;dir&gt;] [--dump-audio &lt;wav&gt;]`
+    - session: `oracle session ...` exposing `set-keys` / `run-frame` / `framebuffer` /
+      `audio`, shaped exactly like your own ABI, so you can diff your emulator against the
+      reference one frame at a time and localize exactly where you diverge.
 
-  <p>Offline, after you stop, your <code>gb_emu.wasm</code> is driven in lockstep against the reference and scored on a composite in [0,1]:</p>
+You have **no internet access**. Everything you need is on disk or behind `oracle`.
 
-  <pre>overall = 0.60 · replay  +  0.20 · audio  +  0.20 · procedural</pre>
+## How you will be graded (so you know what &quot;good&quot; means)
 
-  <ul>
-    <li><strong>replay</strong> (largest weight) — short recorded input sequences are played into both your emulator and the reference; each frame is compared with a structural-similarity metric that rewards "looks almost the same" rather than exact pixel equality. This measures whether real games actually play correctly.</li>
-    <li><strong>procedural</strong> — standard self-checking Game Boy test ROMs, scored on their final state.</li>
-    <li><strong>audio</strong> — your audio output is compared to the reference in the spectral domain.</li>
-  </ul>
+Offline, after you stop, your `gb_emu.wasm` is driven in lockstep against the reference and
+scored on a composite in [0,1]:
 
-  <p>A perfect reference-vs-itself run scores 1.00. You will not be told the grading ROMs or recordings; do not special-case anything.</p>
+    overall = 0.60 · replay  +  0.20 · audio  +  0.20 · procedural
 
-  <h2>Suggested order of attack (not a constraint)</h2>
+- **replay** (largest weight) — short recorded input sequences are played into both your
+  emulator and the reference; each frame is compared with a structural-similarity metric
+  that rewards &quot;looks almost the same&quot; rather than exact pixel equality. This measures
+  whether real games actually play correctly.
+- **procedural** — standard self-checking Game Boy test ROMs, scored on their final state.
+- **audio** — your audio output is compared to the reference in the spectral domain.
 
-  <p>A working SM83 CPU first, then the memory bus and timers (DIV/TIMA), then the PPU (background, window, sprites, the STAT/LY timing) so something renders, then joypad input, then MBC1/MBC3 so larger ROMs load, then the APU for audio. Use <code>oracle</code> constantly to localize divergences frame by frame.</p>
+A perfect reference-vs-itself run scores 1.00. You will not be told the grading ROMs or
+recordings; do not special-case anything.
 
-  <h2>How to respond</h2>
+## Suggested order of attack (not a constraint)
 
-  <p>This trailer is appended after the ABI spec:</p>
+A working SM83 CPU first, then the memory bus and timers (DIV/TIMA), then the PPU
+(background, window, sprites, the STAT/LY timing) so something renders, then joypad input,
+then MBC1/MBC3 so larger ROMs load, then the APU for audio. Use `oracle` constantly to
+localize divergences frame by frame.
 
-  <pre>The cargo project and Cargo.toml already exist and MUST NOT change (package `gb_emu`,
+
+--- spec/ABI.md ---
+# Candidate ABI — Game Boy (DMG) emulator, `wasm32-unknown-unknown`
+
+This is the **only** fixed contract. The internal design of the emulator is entirely up
+to the candidate; the grader interacts with it exclusively through the exports below.
+
+## Artifact
+
+- A Rust **cargo** project whose library crate is named **`gb_emu`** with
+  `crate-type = [&quot;cdylib&quot;]`.
+- Built with **exactly**:
+  ```
+  cargo build --release --lib --target wasm32-unknown-unknown
+  ```
+- Producing the artifact at the **fixed path**:
+  ```
+  target/wasm32-unknown-unknown/release/gb_emu.wasm
+  ```
+- **No** `.cargo/config.toml`, **no** custom `RUSTFLAGS`, no build scripts that alter the
+  target or linker. The module must export its linear memory as `memory` (the default for
+  a `wasm32-unknown-unknown` cdylib).
+
+## Determinism (load-bearing)
+
+The Game Boy has no entropy source. Given the same boot ROM, cartridge ROM, and input
+sequence, the emulator **must** produce a bit-identical sequence of framebuffers and audio
+on every run. No wall-clock, no time-seeded RNG, no host I/O.
+
+## Memory &amp; data exchange
+
+The host reads results directly from the module&#x27;s exported linear `memory`. Buffers
+returned by `framebuffer()` / `audio()` must remain valid and stable until the next call
+to `run_frame()`.
+
+All exports use the C ABI (`#[no_mangle] pub extern &quot;C&quot;`). Pointers are `u32` byte offsets
+into linear memory. Integers are little-endian.
+
+## Exports
+
+### Allocation
+```
+alloc(size: u32) -&gt; u32        // allocate `size` bytes, return offset (ptr); 0 on failure
+dealloc(ptr: u32, size: u32)   // free a prior allocation
+```
+Used by the host to hand ROM bytes to the module: `alloc` a buffer, the host writes bytes
+into `memory` at that offset, then calls `load_rom` / `load_boot_rom`.
+
+### Lifecycle
+```
+init()                         // construct/initialize the emulator instance (call once, first)
+load_boot_rom(ptr: u32, len: u32)  // copy the DMG boot ROM (256 bytes). Optional but required
+                                   //   for faithful lockstep with the oracle.
+load_rom(ptr: u32, len: u32)   // copy the cartridge ROM image
+reset()                        // power-cycle. If a boot ROM was loaded, execution begins in it
+                               //   (so the boot animation is reproduced); otherwise begin at
+                               //   0x0100 with the canonical post-boot register/IO state.
+```
+Call order for a run: `init()` → `load_boot_rom(...)` → `load_rom(...)` → `reset()`.
+
+### Per-frame stepping (lockstep)
+```
+set_keys(mask: u32)            // current joypad state; 1 = pressed. Bit layout:
+                               //   bit0=A  bit1=B  bit2=Select  bit3=Start
+                               //   bit4=Right bit5=Left bit6=Up bit7=Down
+run_frame()                    // advance until exactly one video frame has been produced
+                               //   (one DMG frame = 70224 T-cycles; return at VBlank onset)
+framebuffer() -&gt; u32           // ptr to the completed frame: 160x144 pixels, RGBA8888,
+                               //   4 bytes/pixel, row-major from top-left = 92160 bytes.
+                               //   Alpha is ignored by the grader (set 255). The candidate may
+                               //   use any DMG palette; the grader color-normalizes before SSIM.
+audio() -&gt; u32                 // ptr to audio generated during the last run_frame:
+audio_len() -&gt; u32             // number of i16 samples (interleaved stereo L,R) in that buffer.
+                               //   Sample format: signed 16-bit, 48000 Hz, stereo interleaved.
+                               //   (Audio grading is post-M4; until implemented a candidate may
+                               //    return audio_len()==0, but the exports must exist.)
+```
+
+### Optional debug exports (used only by the internal CPU smoke-test, never by replay grading)
+```
+cpu_pc() -&gt; u32                // current PC (optional)
+cycles() -&gt; u64                // total T-cycles elapsed since reset (optional)
+```
+
+## Frame-boundary convention
+
+One `run_frame()` call == one produced video frame. The grader aligns candidate frame *N*
+to oracle frame *N*, starting from `reset()`. Frames produced during the boot animation are
+included in the sequence. The oracle (SameBoy) is driven through an identically-shaped
+session API so that frame *N* means the same thing on both sides.
+
+## Reference skeleton (signatures only — internal design is yours)
+
+```rust
+// lib.rs — crate `gb_emu`, crate-type = [&quot;cdylib&quot;]
+#[no_mangle] pub extern &quot;C&quot; fn alloc(size: u32) -&gt; u32 { /* ... */ 0 }
+#[no_mangle] pub extern &quot;C&quot; fn dealloc(ptr: u32, size: u32) { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn init() { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn load_boot_rom(ptr: u32, len: u32) { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn load_rom(ptr: u32, len: u32) { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn reset() { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn set_keys(mask: u32) { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn run_frame() { /* ... */ }
+#[no_mangle] pub extern &quot;C&quot; fn framebuffer() -&gt; u32 { /* ... */ 0 }
+#[no_mangle] pub extern &quot;C&quot; fn audio() -&gt; u32 { /* ... */ 0 }
+#[no_mangle] pub extern &quot;C&quot; fn audio_len() -&gt; u32 { /* ... */ 0 }
+```
+
+
+--- HOW TO RESPOND ---
+The cargo project and Cargo.toml already exist and MUST NOT change (package `gb_emu`,
 crate-type cdylib, NO external crates — std only). You implement ONLY `src/lib.rs`.
 Reply with the COMPLETE contents of `src/lib.rs` in a single ```rust code block and nothing
-else. Every export in spec/ABI.md must be present.</pre>
+else. Every export in spec/ABI.md must be present.
+</pre>
 </div>
 
 <footer class="site-footer">
   <a class="plain-link" href="index.html">Home</a> &middot;
-  <a class="plain-link" href="abi.html">ABI spec</a> &middot;
   <a class="plain-link" href="leaderboard/index.html">Leaderboard</a> &middot;
   <a class="plain-link" href="https://github.com/islamborghini/gameboy-eval">source</a>
 </footer>
