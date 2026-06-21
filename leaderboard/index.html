@@ -5,48 +5,86 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>gameboy-eval — leaderboard</title>
 <style>
-  :root { --bg:#0f1115; --panel:#181b22; --ink:#e6e8eb; --muted:#9aa3ad; --line:#272b34; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink);
-         font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
-  .wrap { max-width:880px; margin:0 auto; padding:32px 20px 64px; }
-  h1 { margin:0 0 4px; font-size:26px; }
-  .sub { color:var(--muted); margin:0 0 28px; }
-  code { background:var(--panel); padding:1px 5px; border-radius:4px; }
-  table { width:100%; border-collapse:collapse; background:var(--panel);
-          border:1px solid var(--line); border-radius:10px; overflow:hidden; }
-  th,td { padding:11px 14px; text-align:left; border-bottom:1px solid var(--line); }
-  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
-  tr:last-child td { border-bottom:none; }
-  .rank { color:var(--muted); width:28px; }
-  .name { font-weight:600; }
-  .overall { font-variant-numeric:tabular-nums; font-weight:700; }
-  .bar { height:7px; border-radius:4px; background:#2a2f3a; margin-top:6px; overflow:hidden; }
-  .bar > i { display:block; height:100%; background:linear-gradient(90deg,#3b82f6,#22c55e); }
-  .band { font-size:12px; color:var(--muted); }
-  .sections { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
-  h2 { margin:40px 0 8px; font-size:18px; }
-  .player { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;
-            background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; }
-  canvas { width:320px; height:288px; image-rendering:pixelated;
-           background:#000; border-radius:6px; border:1px solid var(--line); }
-  .ctrl { color:var(--muted); font-size:13px; }
-  button { background:#2563eb; color:#fff; border:0; padding:8px 14px; border-radius:6px;
-           font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
-  .foot { color:var(--muted); font-size:12px; margin-top:28px; }
-  a { color:#7aa2f7; }
-  .legend { font-size:12px; font-weight:400; color:var(--muted); }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px;
-              vertical-align:middle; margin:0 4px 0 12px; }
-  #chart svg { width:100%; height:auto; background:var(--panel);
-               border:1px solid var(--line); border-radius:10px; }
+/* Minimal "paper" style, matching the landing page. No web fonts: inherits the
+   browser default serif. White background, near-black text, one column. */
+html {
+  scrollbar-gutter: stable;
+}
+body {
+  line-height: 1.4;
+  font-size: 16px;
+  padding: 0 10px;
+  margin: 50px auto;
+  max-width: 650px;
+}
+#maincontent {
+  max-width: 42em;
+  margin: 15px auto;
+}
+
+h1 { font-size: 1.7em; margin-bottom: 0.2em; }
+h2 { font-size: 1.2em; margin-top: 1.8em; }
+
+.subtitle { color: #555; margin-top: 0; }
+
+a.plain-link { color: inherit; text-decoration: none; }
+a.plain-link:hover { text-decoration: underline; }
+
+code {
+  background: #f5f5f5;
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+/* Ranked table: borderless, hairline row separators, whitespace does the work. */
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+th, td { text-align: left; padding: 7px 14px 7px 0; border-bottom: 1px solid #eee; }
+th { font-weight: bold; border-bottom: 1px solid #ccc; }
+.rank { color: #888; width: 28px; }
+.overall { font-variant-numeric: tabular-nums; }
+.sections { color: #555; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.band { color: #333; }
+
+/* Monochrome progress bar under the composite. */
+.bar { height: 5px; background: #eee; margin-top: 5px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: #333; }
+
+/* Section legend, greyscale swatches. */
+.legend { font-size: 0.8em; font-weight: 400; color: #555; }
+.legend i { display: inline-block; width: 10px; height: 10px;
+            vertical-align: middle; margin: 0 4px 0 12px; }
+
+#chart svg { width: 100%; height: auto; }
+
+/* In-browser player. */
+.player { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+canvas { width: 320px; height: 288px; image-rendering: pixelated;
+         background: #000; border: 1px solid #ccc; }
+.ctrl { color: #555; font-size: 0.95em; }
+button {
+  font: inherit;
+  background: #fff;
+  color: inherit;
+  border: 1px solid #333;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+button:hover { background: #f5f5f5; }
+button:disabled { opacity: .5; cursor: default; }
+
+.site-footer {
+  margin: 60px auto 30px;
+  max-width: 650px;
+  padding: 18px 10px 0;
+  color: #555;
+  font-size: 15px;
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>gameboy-eval</h1>
-  <p class="sub">How well can a coding agent build a Game&nbsp;Boy (DMG) emulator from scratch?
+<div id="maincontent">
+  <h1>gameboy-eval leaderboard</h1>
+  <p class="subtitle">How well can a coding agent build a Game&nbsp;Boy (DMG) emulator from scratch?
      Composite = <code>0.60·replay + 0.20·audio + 0.20·procedural</code>, graded against a
      SameBoy oracle. 1.00 = indistinguishable from the reference.</p>
 
@@ -62,18 +100,21 @@
   <div class="player">
     <canvas id="screen" width="160" height="144"></canvas>
     <div>
-      <p class="ctrl">The graded artifact is a <code>wasm32-unknown-unknown</code> module —
-         it runs right here. Below is the known-good reference emulator running
+      <p class="ctrl">The graded artifact is a <code>wasm32-unknown-unknown</code> module,
+         and it runs right here. Below is the known-good reference emulator running
          <code>dmg-acid2</code>.</p>
       <p class="ctrl">Keys: arrows = D-pad, <b>Z</b> = A, <b>X</b> = B,
          <b>Enter</b> = Start, <b>Shift</b> = Select.</p>
-      <button id="run">▶ Run dmg-acid2</button>
+      <button id="run">Run dmg-acid2</button>
     </div>
   </div>
-
-  <p class="foot">Generated <span id="gen"></span> ·
-     <a href="https://github.com/islamborghini/gameboy-eval">source</a></p>
 </div>
+
+<footer class="site-footer">
+  Generated <span id="gen"></span> &middot;
+  <a class="plain-link" href="../index.html">Home</a> &middot;
+  <a class="plain-link" href="https://github.com/islamborghini/gameboy-eval">source</a>
+</footer>
 <script src="app.js"></script>
 </body>
 </html>
