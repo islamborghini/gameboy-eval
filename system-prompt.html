@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gameboy-eval — system prompt</title>
+<style>
+/* Minimal "paper" style, matching the landing page. No web fonts. */
+html { scrollbar-gutter: stable; }
+body {
+  line-height: 1.4;
+  font-size: 16px;
+  padding: 0 10px;
+  margin: 50px auto;
+  max-width: 650px;
+}
+#maincontent { max-width: 42em; margin: 15px auto; }
+
+h1 { font-size: 1.7em; margin-bottom: 0.2em; }
+h2 { font-size: 1.2em; margin-top: 1.8em; }
+
+.subtitle { color: #555; margin-top: 0; }
+
+a.plain-link { color: inherit; text-decoration: none; }
+a.plain-link:hover { text-decoration: underline; }
+
+code { background: #f5f5f5; padding: 1px 4px; font-size: 0.9em; }
+
+ul { padding-left: 1.2em; }
+li { margin: 0.6em 0; }
+
+pre {
+  background: #f5f5f5;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+.note {
+  border-left: 2px solid #ccc;
+  padding-left: 14px;
+  color: #555;
+  margin: 1.4em 0;
+}
+
+.site-footer {
+  margin: 60px auto 30px;
+  max-width: 650px;
+  padding: 18px 10px 0;
+  color: #555;
+  font-size: 15px;
+}
+</style>
+</head>
+<body>
+<div id="maincontent">
+  <h1>System prompt</h1>
+  <p class="subtitle">This is the exact instruction the agent receives. It is the same for every model and provider, so the only variable is the model. The prompt is the task below, followed by the full <a href="abi.html">ABI spec</a>, followed by the response instructions.</p>
+
+  <div class="note">The prompt is assembled in <code>harness/generate.py</code> as the contents of <code>env/TASK.md</code>, then the <code>spec/ABI.md</code> contract, then a short trailer telling the model how to reply.</div>
+
+  <h2>Task</h2>
+
+  <p>You are a senior systems engineer. Your task is to implement an accurate emulator of the original Game Boy (model DMG) in Rust, compiled to WebAssembly.</p>
+
+  <p>This is a long-horizon task. There is no deadline and no reward for finishing quickly. Work carefully and incrementally; prefer correctness over coverage. The task does not end. Keep improving accuracy for as long as you are running. If you believe you are "done", pick the next most-impactful inaccuracy and fix it.</p>
+
+  <h2>What you must produce</h2>
+
+  <p>A Rust cargo project rooted at <code>/task/</code> whose library crate is named <code>gb_emu</code> and builds, with exactly:</p>
+
+  <pre>cargo build --release --lib --target wasm32-unknown-unknown</pre>
+
+  <p>to <code>target/wasm32-unknown-unknown/release/gb_emu.wasm</code>, exporting the ABI specified in <code>/task/spec/ABI.md</code>. Do not add a <code>.cargo/config.toml</code>, custom <code>RUSTFLAGS</code>, or anything that changes the build command or the artifact path. The ABI is the only fixed contract; every internal design decision (CPU, PPU, timing, memory mapping, MBCs, APU) is yours.</p>
+
+  <h2>What you are given (read-only)</h2>
+  <ul>
+    <li><code>/task/spec/ABI.md</code> — the exact WASM exports your module must provide.</li>
+    <li><code>/task/spec/pandocs.html</code> — Pan Docs, the community Game Boy hardware reference.</li>
+    <li><code>/task/spec/boot_rom.bin</code> — an open-source DMG boot ROM. Load it via <code>load_boot_rom</code> so that your power-on behavior matches the reference.</li>
+    <li><code>/task/dev-roms/</code> — a handful of homebrew Game Boy ROMs you may use to self-test. (These are for your own debugging; the grading ROMs and input recordings are different and are held out from you.)</li>
+  </ul>
+
+  <h2>Tools available to you</h2>
+  <ul>
+    <li>A normal shell, <code>rustc</code>/<code>cargo</code> with the <code>wasm32-unknown-unknown</code> target, and <code>wasmtime</code>.</li>
+    <li><code>oracle</code> — a command-line client to a reference Game Boy emulator running as a remote black box. You may run any ROM through it and observe its output (framebuffers, audio), but you cannot see its source. Use it as ground truth:
+      <pre>batch:   oracle run &lt;rom&gt; &lt;frames&gt; [--keys &lt;replay.txt&gt;] [--dump-frames &lt;dir&gt;] [--dump-audio &lt;wav&gt;]
+session: oracle session ...   # set-keys / run-frame / framebuffer / audio,
+                              #   shaped exactly like your own ABI, so you can diff
+                              #   your emulator against the reference one frame at a time
+                              #   and localize exactly where you diverge.</pre>
+    </li>
+  </ul>
+  <p>You have no internet access. Everything you need is on disk or behind <code>oracle</code>.</p>
+
+  <h2>How you will be graded (so you know what "good" means)</h2>
+
+  <p>Offline, after you stop, your <code>gb_emu.wasm</code> is driven in lockstep against the reference and scored on a composite in [0,1]:</p>
+
+  <pre>overall = 0.60 · replay  +  0.20 · audio  +  0.20 · procedural</pre>
+
+  <ul>
+    <li><strong>replay</strong> (largest weight) — short recorded input sequences are played into both your emulator and the reference; each frame is compared with a structural-similarity metric that rewards "looks almost the same" rather than exact pixel equality. This measures whether real games actually play correctly.</li>
+    <li><strong>procedural</strong> — standard self-checking Game Boy test ROMs, scored on their final state.</li>
+    <li><strong>audio</strong> — your audio output is compared to the reference in the spectral domain.</li>
+  </ul>
+
+  <p>A perfect reference-vs-itself run scores 1.00. You will not be told the grading ROMs or recordings; do not special-case anything.</p>
+
+  <h2>Suggested order of attack (not a constraint)</h2>
+
+  <p>A working SM83 CPU first, then the memory bus and timers (DIV/TIMA), then the PPU (background, window, sprites, the STAT/LY timing) so something renders, then joypad input, then MBC1/MBC3 so larger ROMs load, then the APU for audio. Use <code>oracle</code> constantly to localize divergences frame by frame.</p>
+
+  <h2>How to respond</h2>
+
+  <p>This trailer is appended after the ABI spec:</p>
+
+  <pre>The cargo project and Cargo.toml already exist and MUST NOT change (package `gb_emu`,
+crate-type cdylib, NO external crates — std only). You implement ONLY `src/lib.rs`.
+Reply with the COMPLETE contents of `src/lib.rs` in a single ```rust code block and nothing
+else. Every export in spec/ABI.md must be present.</pre>
+</div>
+
+<footer class="site-footer">
+  <a class="plain-link" href="index.html">Home</a> &middot;
+  <a class="plain-link" href="abi.html">ABI spec</a> &middot;
+  <a class="plain-link" href="leaderboard/index.html">Leaderboard</a> &middot;
+  <a class="plain-link" href="https://github.com/islamborghini/gameboy-eval">source</a>
+</footer>
+</body>
+</html>
