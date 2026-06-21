@@ -3,9 +3,8 @@
 // Stacked horizontal bar per model: each bar = the three weighted contributions to the
 // composite (0.60·replay + 0.20·audio + 0.20·procedural), so the bar length IS the score and
 // you can see *why* a model ranks where it does (e.g. a missing audio segment).
-// Greyscale to match the paper style: dark = replay, mid = audio, light = procedural.
-const SECTIONS = [["replay", 0.60, "#333"], ["audio", 0.20, "#888"],
-                  ["procedural", 0.20, "#ccc"]];
+const SECTIONS = [["replay", 0.60, "#3b82f6"], ["audio", 0.20, "#a855f7"],
+                  ["procedural", 0.20, "#22c55e"]];
 
 function renderChart(entries) {
   const W = 680, rowH = 30, padL = 150, padR = 50, padT = 26, padB = 8;
@@ -56,7 +55,8 @@ const KEYS = { ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7,
                z: 0, x: 1, Shift: 2, Enter: 3 };
 let keymask = 0;
 
-let rafId = 0; // so switching candidates cancels the previous loop
+let rafId = 0;     // so switching candidates cancels the previous loop
+let loadedRom = null; // a user-supplied game ROM, or null for the dmg-acid2 default
 
 async function makePlayer(wasmUrl) {
   cancelAnimationFrame(rafId); // stop any candidate already running
@@ -68,9 +68,11 @@ async function makePlayer(wasmUrl) {
   const put = (bytes) => { const p = ex.alloc(bytes.length); mem().set(bytes, p); return [p, bytes.length]; };
   const fetchBytes = async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer());
 
+  const rom = loadedRom || await fetchBytes("demo/dmg-acid2.gb");
+
   ex.init?.();
   ex.load_boot_rom?.(...put(await fetchBytes("demo/boot_rom.bin")));
-  ex.load_rom(...put(await fetchBytes("demo/dmg-acid2.gb")));
+  ex.load_rom(...put(rom));
   ex.reset();
 
   const cv = document.getElementById("screen");
@@ -90,6 +92,13 @@ async function makePlayer(wasmUrl) {
 
 addEventListener("keydown", (e) => { if (e.key in KEYS) { keymask |= 1 << KEYS[e.key]; e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key in KEYS) keymask &= ~(1 << KEYS[e.key]); });
+
+document.getElementById("rom").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  loadedRom = new Uint8Array(await file.arrayBuffer());
+  document.getElementById("romname").textContent = file.name;
+});
 
 document.getElementById("run").addEventListener("click", async (e) => {
   const btn = e.target;

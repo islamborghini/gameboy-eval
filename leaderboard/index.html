@@ -102,8 +102,10 @@ select { font: inherit; padding: 5px 6px; border: 1px solid #333; background: #f
     <canvas id="screen" width="160" height="144"></canvas>
     <div>
       <p class="ctrl">Each graded artifact is a <code>wasm32-unknown-unknown</code> module,
-         and it runs right here on <code>dmg-acid2</code>. Pick a candidate and watch it
-         draw the screen (or fail to).</p>
+         and it runs right here. It boots <code>dmg-acid2</code> by default, which is a PPU
+         correctness test (a single static frame), not a game. To actually play, load a
+         homebrew game ROM. You can grab one from the
+         <a href="https://hh.gbdev.io/search?platform=GB&amp;typetag=game">Homebrew Hub</a>.</p>
       <p class="ctrl">Keys: arrows = D-pad, <b>Z</b> = A, <b>X</b> = B,
          <b>Enter</b> = Start, <b>Shift</b> = Select.</p>
       <p class="ctrl">
@@ -115,6 +117,11 @@ select { font: inherit; padding: 5px 6px; border: 1px solid #333; background: #f
           <option value="gpt-oss-120b.wasm">gpt-oss-120b</option>
         </select>
         <button id="run">Run</button>
+      </p>
+      <p class="ctrl">
+        <label for="rom">ROM:</label>
+        <input type="file" id="rom" accept=".gb,.gbc">
+        <span id="romname">dmg-acid2 (default)</span>
       </p>
     </div>
   </div>
