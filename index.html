@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gameboy-eval</title>
+<style>
+/* Minimal "paper" style. No web fonts: inherits the browser default serif,
+   which is the whole point. White background, near-black text, one column. */
+html {
+  scrollbar-gutter: stable; /* avoid layout shift when a scrollbar appears */
+}
+body {
+  line-height: 1.4;
+  font-size: 16px;
+  padding: 0 10px;
+  margin: 50px auto;
+  max-width: 650px;
+}
+#maincontent {
+  max-width: 42em;
+  margin: 15px auto;
+}
+
+h1 { font-size: 1.7em; margin-bottom: 0.2em; }
+h2 { font-size: 1.2em; margin-top: 1.8em; }
+
+.logo { width: 64px; height: auto; display: block; margin: 0 0 14px; }
+
+img.demo { display: block; width: 100%; height: auto; margin: 1.4em 0; }
+
+/* Understated links for nav/footer: inherit text color, underline on hover. */
+a.plain-link { color: inherit; text-decoration: none; }
+a.plain-link:hover { text-decoration: underline; }
+
+ul { padding-left: 1.2em; }
+li { margin: 0.6em 0; }
+
+pre {
+  background: #f5f5f5;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+pre.diagram { /* bare ASCII diagram, no box */
+  background: none;
+  padding: 0;
+  color: #333;
+  line-height: 1.35;
+  margin: 1.2em 0 1.4em;
+}
+
+table { border-collapse: collapse; margin: 1em 0; }
+th, td { text-align: left; padding: 4px 18px 4px 0; }
+th { font-weight: bold; }
+
+.subtitle { color: #555; margin-top: 0; }
+
+.site-footer {
+  margin: 60px auto 30px;
+  max-width: 650px;
+  padding: 18px 10px 0;
+  color: #555;
+  font-size: 15px;
+}
+</style>
+</head>
+<body>
+<div id="maincontent">
+  <h1>gameboy-eval</h1>
+  <p class="subtitle">An open, free, local-first benchmark that measures how well a coding agent can build a Game Boy (DMG) emulator from scratch. Grading is automatic, deterministic, and runs for free on a laptop.</p>
+
+  <img class="demo" src="gif.gif" alt="gameboy-eval demo">
+
+  <p>gameboy-eval gives a coding agent one job: write a working Game Boy emulator in Rust, with no libraries, starting from nothing. We drop the agent into a sandboxed, offline container alongside a black-box reference emulator (the "oracle"), let it iterate, and save whatever it produces as a portable WebAssembly module. Later, with the model completely out of the loop, we grade that module by running it next to the oracle and measuring how closely it matches.</p>
+
+  <p>The whole thing rests on one idea: you do not need to hand-write a test suite to know whether an emulator is correct, because you already have a correct emulator. So you grade a candidate by differential comparison against a trusted reference, frame by frame. That keeps grading cheap, reproducible, and independent of whichever model or provider produced the code.</p>
+
+  <p>It is an open, Game Boy take on the idea behind Mechanize's GBA Eval.</p>
+
+  <h2>How we grade</h2>
+  <p>Grading never asks the model anything. It runs the saved artifact and scores it against the oracle on three axes, then folds them into a single composite:</p>
+
+  <pre class="diagram">overall = 0.60 * replay  +  0.20 * audio  +  0.20 * procedural</pre>
+
+  <ul>
+    <li><strong>Replay (the centerpiece).</strong> Run the candidate and the SameBoy oracle in lockstep on the same recorded inputs and compare every rendered frame. The comparison uses structural similarity (block SSIM) instead of exact pixel equality, because two correct emulators are almost never bit-identical. The target is "almost the same almost everywhere," which tracks human-perceived correctness far better than an exact match.</li>
+    <li><strong>Procedural.</strong> Run a set of open, self-checking Game Boy test ROMs and compare the final screen to the oracle's. These ROMs exercise tricky CPU, timing, and PPU behavior, so passing them is strong evidence that the core is accurate.</li>
+    <li><strong>Audio.</strong> Compare the candidate's sound output to the oracle's using a log-mel spectrogram distance, through the same per-frame pipeline.</li>
+  </ul>
+
+  <p>Results land in human-readable bands, so a single number is easy to interpret:</p>
+
+  <table>
+    <tr><th>band</th><th>composite</th></tr>
+    <tr><td>doesn't run</td><td>~0 to 5%</td></tr>
+    <tr><td>barely works</td><td>~15 to 30%</td></tr>
+    <tr><td>plays incorrectly</td><td>~45 to 55%</td></tr>
+    <tr><td>mostly playable</td><td>~70%</td></tr>
+    <tr><td>near-reference</td><td>~85 to 99%</td></tr>
+    <tr><td>reference vs itself</td><td>100%</td></tr>
+  </table>
+
+  <p>Two design choices make this practical. The artifact is a portable wasm module behind a fixed ABI: a candidate is a Rust crate that must build with one fixed command and export a small lockstep interface, which the grader drives from Python through wasmtime. And the model is out of the loop at grading time: generation happens once and costs money, while grading happens any number of times, offline, for free, and returns the same answer on every run.</p>
+
+  <h2>Example results</h2>
+  <p>A few candidates graded against the same oracle, spanning the range from a frontier model to a small local one:</p>
+
+  <table>
+    <tr><th>candidate</th><th>composite</th><th>band</th></tr>
+    <tr><td>oracle (self-play)</td><td>~100%</td><td>reference vs itself</td></tr>
+    <tr><td>claude-opus-4.8</td><td>89.5%</td><td>near-reference</td></tr>
+    <tr><td>qwen2.5-coder:7b</td><td>~0%</td><td>doesn't run</td></tr>
+  </table>
+
+  <p>The full ranked list, with per-section scores, lives on the <a href="leaderboard/index.html">leaderboard</a>.</p>
+
+  <h2>Why Game Boy</h2>
+  <p>The original Game Boy (DMG) hits a sweet spot for a benchmark like this.</p>
+  <ul>
+    <li><strong>Small enough to be tractable, rich enough to be hard.</strong> An 8-bit CPU (Sharp SM83), a simple but quirky PPU, timers, and audio. A faithful emulator is a real engineering effort rather than a weekend toy, yet it still fits in a single file.</li>
+    <li><strong>A culture of precise, open test ROMs.</strong> Decades of emulator-accuracy work left behind well-known, self-checking ROMs that pin down exact hardware behavior, which is exactly what a grader needs.</li>
+    <li><strong>Everything we depend on is open.</strong> No proprietary BIOS is required, and the reference emulator, the test ROMs, and the tooling are all freely available.</li>
+  </ul>
+
+  <h2>The GUI</h2>
+  <p>A small browser control panel wraps the same scripts, using only the Python standard library and binding to localhost. It lets you check prerequisites, run the agentic generation loop against your chosen provider, grade artifacts and browse past runs, watch a candidate next to the real SameBoy oracle, play any candidate's emulator in your browser with live keyboard input and audio, and view a ranked leaderboard with a per-section score chart.</p>
+
+  <h2>Built on open work</h2>
+  <ul>
+    <li><a href="https://github.com/LIJI32/SameBoy">SameBoy</a>, a highly accurate open-source Game Boy emulator, run as the black-box oracle.</li>
+    <li><a href="https://github.com/c-sp/game-boy-test-roms">c-sp/game-boy-test-roms</a>, a curated bundle of the community's accuracy test ROMs.</li>
+    <li><a href="https://github.com/mattcurrie/dmg-acid2">dmg-acid2</a> by Matt Currie, a single-frame PPU correctness test.</li>
+    <li><a href="https://github.com/mvdnes/rboy">rboy</a>, a known-good third-party emulator compiled to wasm to confirm the grader is sound.</li>
+    <li><a href="https://gbdev.io/pandocs/">Pan Docs</a>, the canonical Game Boy hardware reference, and <a href="https://rgbds.gbdev.io/">RGBDS</a> for assembling the open boot ROM.</li>
+  </ul>
+</div>
+
+<footer class="site-footer">
+  <a class="plain-link" href="https://github.com/islamborghini/gameboy-eval">GitHub</a> &middot;
+  <a class="plain-link" href="spec/ABI.md">ABI spec</a> &middot;
+  <a class="plain-link" href="leaderboard/index.html">Leaderboard</a>
+</footer>
+</body>
+</html>
